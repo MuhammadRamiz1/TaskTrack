@@ -15,9 +15,9 @@ import environ
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent   # backend/
 env = environ.Env()
-environ.Env.read_env(BASE_DIR.parent / ".env")   # silently skipped if the file doesn't exist (e.g. in Docker)
+environ.Env.read_env(BASE_DIR.parent / ".env")   # repo-root .env; skipped in Docker (compose passes env_file)
 
 
 # Quick-start development settings - unsuitable for production
@@ -29,9 +29,6 @@ DEBUG = env.bool("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
 
 
-ALLOWED_HOSTS = []
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -41,19 +38,24 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-]
-INSTALLED_APPS += [
-    "rest_framework", "drf_spectacular",
+    "rest_framework", "rest_framework.authtoken", "drf_spectacular",
     "apps.core", "apps.accounts", "apps.organizations",
     "apps.teams", "apps.projects", "apps.audit",
 ]
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",   # header: Authorization: Token <key>
+        "rest_framework.authentication.SessionAuthentication",  # browsable API / admin login
+    ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},   # max 10 login attempts per minute per IP
 }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',   # serves static files under gunicorn
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -85,7 +87,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {"default": env.db("DATABASE_URL")}
+DATABASES = {"default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
 DATABASES["default"]["ATOMIC_REQUESTS"] = True   # one transaction per request (needed for RLS later)
 
 
@@ -126,6 +128,11 @@ AUTH_USER_MODEL = "accounts.User"
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 
 # Email
