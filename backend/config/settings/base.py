@@ -50,7 +50,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},   # max 10 login attempts per minute per IP
+    "DEFAULT_THROTTLE_RATES": {"login": "5/min"},   # max 10 login attempts per minute per IP
 }
 
 MIDDLEWARE = [
@@ -87,8 +87,20 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {"default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
-DATABASES["default"]["ATOMIC_REQUESTS"] = True   # one transaction per request (needed for RLS later)
+# DATABASES = {"default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
+# DATABASES["default"]["ATOMIC_REQUESTS"] = True   # one transaction per request (needed for RLS later)
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("POSTGRES_DB", default="tasktrack_db"),
+        "USER": env("POSTGRES_USER", default="tasktrack_user"),
+        "PASSWORD": env("POSTGRES_PASSWORD", default="tasktrack_password"),
+        "HOST": env("POSTGRES_HOST", default="127.0.0.1"),
+        "PORT": env("POSTGRES_PORT", default="4000"),
+        "ATOMIC_REQUESTS": True,
+    }
+}
+
 
 
 # Password validation
