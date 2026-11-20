@@ -89,18 +89,21 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # DATABASES = {"default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
 # DATABASES["default"]["ATOMIC_REQUESTS"] = True   # one transaction per request (needed for RLS later)
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": env("POSTGRES_DB", default="tasktrack_db"),
+#         "USER": env("POSTGRES_USER", default="tasktrack_user"),
+#         "PASSWORD": env("POSTGRES_PASSWORD", default="tasktrack_password"),
+#         "HOST": env("POSTGRES_HOST", default="127.0.0.1"),
+#         "PORT": env("POSTGRES_PORT", default="4000"),
+#         "ATOMIC_REQUESTS": True,
+#     }
+# }
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB", default="tasktrack_db"),
-        "USER": env("POSTGRES_USER", default="tasktrack_user"),
-        "PASSWORD": env("POSTGRES_PASSWORD", default="tasktrack_password"),
-        "HOST": env("POSTGRES_HOST", default="127.0.0.1"),
-        "PORT": env("POSTGRES_PORT", default="4000"),
-        "ATOMIC_REQUESTS": True,
-    }
+    "default": env.db("DATABASE_URL"),
 }
-
+DATABASES["default"]["ATOMIC_REQUESTS"] = True  # one transaction per request (needed for RLS later)
 
 
 # Password validation

@@ -1,4 +1,3 @@
-
 services:
 
   # Next.js Frontend
@@ -22,8 +21,8 @@ services:
   # Django Backend
   backend:
     build:
-      context: .                      # repo root: needs pyproject.toml + uv.lock
-      dockerfile: backend/Dockerfile
+      context: ./backend              # backend/ holds pyproject.toml + uv.lock
+      dockerfile: Dockerfile          # relative to the context, NOT the repo root
       args:
         DEV: "true"                   # include pytest/ruff for `make test` / `make lint`
     container_name: tasktrack-backend
@@ -36,7 +35,7 @@ services:
     env_file: .env                    # DJANGO_SECRET_KEY etc.
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.dev
-      # Settings read DATABASE_URL / REDIS_URL. Host is the service name, not localhost.
+      # Host is the service name, not localhost.
       DATABASE_URL: postgres://tasktrack_user:tasktrack_password@db:5432/tasktrack_db
       REDIS_URL: redis://redis:6379/0
     depends_on:
