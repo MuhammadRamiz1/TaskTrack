@@ -1,4 +1,4 @@
-OWNER_URL=postgres://tasktrack:tasktrack_dev@db:5432/tasktrack
+OWNER_URL=postgres://tasktrack_user:tasktrack_password@db:5432/tasktrack_db
 
 up:
 	docker compose up -d --build

@@ -22,21 +22,23 @@ services:
   # Django Backend
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .                      # repo root: needs pyproject.toml + uv.lock
+      dockerfile: backend/Dockerfile
+      args:
+        DEV: "true"                   # include pytest/ruff for `make test` / `make lint`
     container_name: tasktrack-backend
+    # Dev server with auto-reload (code is bind-mounted). The image's default CMD is gunicorn for prod.
+    command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    env_file: .env                    # DJANGO_SECRET_KEY etc.
     environment:
-      DB_NAME: tasktrack_db
-      DB_USER: tasktrack_user
-      DB_PASSWORD: tasktrack_password
-      DB_HOST: db
-      DB_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      # Settings read DATABASE_URL / REDIS_URL. Host is the service name, not localhost.
+      DATABASE_URL: postgres://tasktrack_user:tasktrack_password@db:5432/tasktrack_db
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
