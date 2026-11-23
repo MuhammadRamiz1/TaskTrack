@@ -350,3 +350,37 @@ class ImpersonationOutput(serializers.Serializer):
     expires_at = serializers.DateTimeField()
     target_user = UserBrief()
     company_id = serializers.UUIDField()
+
+
+# --- Employee import ------------------------------------------------------------------
+
+
+class EmployeeImportInput(serializers.Serializer):
+    file = serializers.FileField(
+        help_text="A .xlsx or .csv file. Header row with 'email' (required), 'first_name', 'last_name', "
+        "'job_title'. At most 500 rows, 2 MB."
+    )
+
+
+class EmployeeImportRow(serializers.Serializer):
+    row = serializers.IntegerField(help_text="Spreadsheet row number (the header is row 1)")
+    email = serializers.CharField()
+    first_name = serializers.CharField(allow_blank=True)
+    last_name = serializers.CharField(allow_blank=True)
+    job_title = serializers.CharField(allow_blank=True)
+    status = serializers.ChoiceField(choices=["ready", "error", "created", "failed"])
+    errors = serializers.ListField(child=serializers.CharField())
+
+
+class EmployeeImportSummary(serializers.Serializer):
+    total = serializers.IntegerField()
+    ready = serializers.IntegerField()
+    error = serializers.IntegerField()
+    created = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    seats_available = serializers.IntegerField()
+
+
+class EmployeeImportOutput(serializers.Serializer):
+    summary = EmployeeImportSummary()
+    rows = EmployeeImportRow(many=True)

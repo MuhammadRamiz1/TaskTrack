@@ -15,7 +15,7 @@ from apps.rbac.models import Role, UserRole
 
 from . import serializers as s
 from .models import InviteToken, User
-from .services import employees, invites
+from .services import employee_import, employees, invites
 
 VIEW = "employee.view_private"
 
@@ -96,6 +96,41 @@ class EmployeeListView(_EmployeeView):
         data.is_valid(raise_exception=True)
         user = employees.create(actor=request.user, data=data.validated_data)
         return Response(self.output(user.pk), status=status.HTTP_201_CREATED)
+
+
+def _upload(request):
+    upload = request.FILES.get("file")
+    if upload is None:
+        raise InvalidInput(details={"file": ["Attach a .xlsx or .csv file in the 'file' field."]})
+    return upload
+
+
+class EmployeeImportPreviewView(_EmployeeView):
+    permission_map = {"POST": "employee.create"}
+
+    @extend_schema(
+        request={"multipart/form-data": s.EmployeeImportInput},
+        responses=s.EmployeeImportOutput,
+        tags=["hr"],
+        summary="Check an employee sheet without creating anyone",
+    )
+    def post(self, request):
+        result = employee_import.preview(actor=request.user, uploaded=_upload(request))
+        return Response(s.EmployeeImportOutput(result).data)
+
+
+class EmployeeImportView(_EmployeeView):
+    permission_map = {"POST": "employee.create"}
+
+    @extend_schema(
+        request={"multipart/form-data": s.EmployeeImportInput},
+        responses=s.EmployeeImportOutput,
+        tags=["hr"],
+        summary="Create employees from a sheet and email each an invite link",
+    )
+    def post(self, request):
+        result = employee_import.run(actor=request.user, uploaded=_upload(request))
+        return Response(s.EmployeeImportOutput(result).data)
 
 
 class EmployeeDetailView(_EmployeeView):

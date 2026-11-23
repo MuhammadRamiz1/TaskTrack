@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, UserPlus } from "lucide-react";
+import { FileSpreadsheet, Search, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Pager, ResponsiveTable } from "@/components/common/pager";
 import { INVITE_TONE, USER_TONE } from "@/components/common/tones";
+import { EmployeeImportDialog } from "@/components/hr/employee-import-dialog";
 import { Can } from "@/components/layout/guards";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/form";
@@ -86,6 +87,7 @@ export default function EmployeesPage() {
   const [status, setStatus] = useState("");
   const [role, setRole] = useState("");
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const roles = $api.useQuery("get", "/api/v1/hr/roles/");
   const employees = $api.useQuery("get", "/api/v1/hr/employees/", {
     params: {
@@ -98,7 +100,14 @@ export default function EmployeesPage() {
   return (
     <>
       <PageHeader title="People" description="Employee accounts, invites and access."
-                  actions={<Can anyOf={["employee.create"]}><Button onClick={() => setCreating(true)}><UserPlus /> Add employee</Button></Can>} />
+                  actions={
+                    <Can anyOf={["employee.create"]}>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setImporting(true)}><FileSpreadsheet /> Import from sheet</Button>
+                        <Button onClick={() => setCreating(true)}><UserPlus /> Add employee</Button>
+                      </div>
+                    </Can>
+                  } />
       <Card>
         <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-[1fr_180px_180px]">
           <div className="relative">
@@ -149,6 +158,7 @@ export default function EmployeesPage() {
         </QueryState>
       </Card>
       {creating && <NewEmployeeDialog onClose={() => setCreating(false)} />}
+      {importing && <EmployeeImportDialog onClose={() => setImporting(false)} />}
     </>
   );
 }

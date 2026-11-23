@@ -7,6 +7,8 @@ from . import views_hr as v
 
 urlpatterns = [
     path("employees/", v.EmployeeListView.as_view(), name="hr-employees"),
+    path("employees/import/preview/", v.EmployeeImportPreviewView.as_view(), name="hr-employee-import-preview"),
+    path("employees/import/", v.EmployeeImportView.as_view(), name="hr-employee-import"),
     path("employees/<uuid:user_id>/", v.EmployeeDetailView.as_view(), name="hr-employee-detail"),
     path("employees/<uuid:user_id>/invite/", v.EmployeeInviteView.as_view(), name="hr-employee-invite"),
     path(

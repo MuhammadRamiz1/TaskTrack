@@ -28,6 +28,7 @@ AUDIT_EXEMPT = {
     ("auth-password-forgot", "POST"),  # unknown/inactive email: nothing happens (no enumeration)
     ("auth-logout", "POST"),  # no or invalid cookie: nothing to revoke
     ("auth-refresh", "POST"),  # rotation is bookkeeping; reuse detection is audited separately
+    ("hr-employee-import-preview", "POST"),  # read-only check of an uploaded sheet
 }
 SKIP_COVERAGE = {"schema", "docs", "redoc"}
 
