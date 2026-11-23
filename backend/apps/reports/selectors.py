@@ -231,6 +231,39 @@ def time_report(actor, f: Filters) -> list[dict]:
     ]
 
 
+def time_by_task(actor, f: Filters) -> list[dict]:
+    """Hours per employee, task and day: who worked on what, and when."""
+    rows = (
+        scoped_entries(actor, f)
+        .values(
+            "user_id",
+            "user__first_name",
+            "user__last_name",
+            "task_id",
+            "task__number",
+            "task__title",
+            "task__project__key",
+            "work_date",
+        )
+        .annotate(seconds=Sum("duration_seconds"), entries=Count("pk"))
+        .order_by("user__first_name", "user__last_name", "task__project__key", "task__number", "work_date")
+    )
+    return [
+        {
+            "user_id": r["user_id"],
+            "member": _name(r["user__first_name"], r["user__last_name"]),
+            "task_id": r["task_id"],
+            "task_key": f"{r['task__project__key']}-{r['task__number']}",
+            "task_title": r["task__title"],
+            "project_key": r["task__project__key"],
+            "work_date": r["work_date"],
+            "hours": _hours(r["seconds"]),
+            "entries": r["entries"],
+        }
+        for r in rows
+    ]
+
+
 def task_report(actor, f: Filters) -> list[dict]:
     key, label_fields = _GROUPS["tasks"][f.group_by]
     base = scoped_tasks(actor, f)

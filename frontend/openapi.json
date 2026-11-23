@@ -5232,6 +5232,110 @@
                 }
             }
         },
+        "/api/v1/reports/time/tasks/": {
+            "get": {
+                "operationId": "reports_time_tasks_list",
+                "summary": "Logged hours per member, task and day",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "date_from",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "date_to",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "group_by",
+                        "schema": {
+                            "enum": [
+                                "member",
+                                "team",
+                                "project"
+                            ],
+                            "type": "string",
+                            "default": "member",
+                            "minLength": 1
+                        },
+                        "description": "* `member` - member\n* `team` - team\n* `project` - project"
+                    },
+                    {
+                        "in": "query",
+                        "name": "period",
+                        "schema": {
+                            "enum": [
+                                "daily",
+                                "weekly",
+                                "monthly"
+                            ],
+                            "type": "string",
+                            "default": "weekly",
+                            "minLength": 1
+                        },
+                        "description": "* `daily` - daily\n* `weekly` - weekly\n* `monthly` - monthly"
+                    },
+                    {
+                        "in": "query",
+                        "name": "project",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "team",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "user",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TimeTaskRow"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/reviews/queue/": {
             "get": {
                 "operationId": "reviews_queue_list",
@@ -13330,6 +13434,53 @@
                 ],
                 "type": "string",
                 "description": "* `RUNNING` - Running\n* `DRAFT` - Draft\n* `SUBMITTED` - Submitted\n* `APPROVED` - Approved"
+            },
+            "TimeTaskRow": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "member": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "task_key": {
+                        "type": "string"
+                    },
+                    "task_title": {
+                        "type": "string"
+                    },
+                    "project_key": {
+                        "type": "string"
+                    },
+                    "work_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "hours": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "entries": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "entries",
+                    "hours",
+                    "member",
+                    "project_key",
+                    "task_id",
+                    "task_key",
+                    "task_title",
+                    "user_id",
+                    "work_date"
+                ]
             },
             "TimeRow": {
                 "type": "object",

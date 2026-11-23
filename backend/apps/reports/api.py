@@ -47,6 +47,18 @@ class TimeRow(serializers.Serializer):
     entries = serializers.IntegerField()
 
 
+class TimeTaskRow(serializers.Serializer):
+    user_id = serializers.UUIDField()
+    member = serializers.CharField()
+    task_id = serializers.UUIDField()
+    task_key = serializers.CharField()
+    task_title = serializers.CharField()
+    project_key = serializers.CharField()
+    work_date = serializers.DateField()
+    hours = serializers.FloatField()
+    entries = serializers.IntegerField()
+
+
 class TaskRow(serializers.Serializer):
     group_id = serializers.UUIDField(allow_null=True)
     group = serializers.CharField()
@@ -203,6 +215,20 @@ class TimeReportView(TenantAPIView):
         return Response(TimeRow(selectors.time_report(request.user, _filters(request)), many=True).data)
 
 
+class TimeByTaskReportView(TenantAPIView):
+    queryset = EXPORT_HINT
+    permission_map = {"GET": "report.view"}
+
+    @extend_schema(
+        parameters=[ReportQuery],
+        responses=TimeTaskRow(many=True),
+        tags=["reports"],
+        summary="Logged hours per member, task and day",
+    )
+    def get(self, request):
+        return Response(TimeTaskRow(selectors.time_by_task(request.user, _filters(request)), many=True).data)
+
+
 class TaskReportView(TenantAPIView):
     queryset = EXPORT_HINT
     permission_map = {"GET": "report.view"}
@@ -321,6 +347,7 @@ dashboard_urlpatterns = [
 urlpatterns = [
     path("tasks/", TaskReportView.as_view(), name="report-tasks"),
     path("time/", TimeReportView.as_view(), name="report-time"),
+    path("time/tasks/", TimeByTaskReportView.as_view(), name="report-time-tasks"),
     path("exports/", ExportListView.as_view(), name="report-exports"),
     path("exports/<uuid:export_id>/", ExportDetailView.as_view(), name="report-export-detail"),
     path("exports/<uuid:export_id>/download/", ExportDownloadView.as_view(), name="report-export-download"),

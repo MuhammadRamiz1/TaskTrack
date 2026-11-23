@@ -89,6 +89,21 @@ class TestReports:
         assert by_project[0]["group"] == "WEB Project WEB"
         assert client.get(f"{R}time/?group_by=team").json()[0]["group"] == "Web"
 
+    def test_time_by_task_report(self, world, activity):
+        done, _ = activity
+        rows = f.client_for(world.manager).get(f"{R}time/tasks/").json()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["member"] == world.member.full_name
+        assert row["task_id"] == str(done.pk) and row["task_key"] == f"WEB-{done.number}"
+        assert row["task_title"] == "Done" and row["project_key"] == "WEB"
+        assert row["hours"] == 2.5 and row["entries"] == 1 and row["work_date"]
+
+    def test_time_by_task_report_is_scoped(self, world, activity):
+        assert f.client_for(world.member2).get(f"{R}time/tasks/").json() == []
+        assert len(f.client_for(world.member).get(f"{R}time/tasks/").json()) == 1
+        assert f.client_for(world.hr).get(f"{R}time/tasks/").status_code == 403
+
     def test_task_report(self, world, activity):
         rows = f.client_for(world.manager).get(f"{R}tasks/?group_by=project&period=monthly").json()
         assert sum(r["created"] for r in rows) == 2

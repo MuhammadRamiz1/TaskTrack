@@ -1416,6 +1416,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/time/tasks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Logged hours per member, task and day */
+        get: operations["reports_time_tasks_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/queue/": {
         parameters: {
             query?: never;
@@ -3848,6 +3865,21 @@ export interface components {
          * @enum {string}
          */
         TimeEntryStatusEnum: "RUNNING" | "DRAFT" | "SUBMITTED" | "APPROVED";
+        TimeTaskRow: {
+            /** Format: uuid */
+            user_id: string;
+            member: string;
+            /** Format: uuid */
+            task_id: string;
+            task_key: string;
+            task_title: string;
+            project_key: string;
+            /** Format: date */
+            work_date: string;
+            /** Format: double */
+            hours: number;
+            entries: number;
+        };
         TimeRow: {
             /** Format: uuid */
             group_id: string | null;
@@ -6676,6 +6708,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimeRow"][];
+                };
+            };
+        };
+    };
+    reports_time_tasks_list: {
+        parameters: {
+            query?: {
+                date_from?: string;
+                date_to?: string;
+                /**
+                 * @description * `member` - member
+                 *     * `team` - team
+                 *     * `project` - project
+                 */
+                group_by?: "member" | "team" | "project";
+                /**
+                 * @description * `daily` - daily
+                 *     * `weekly` - weekly
+                 *     * `monthly` - monthly
+                 */
+                period?: "daily" | "weekly" | "monthly";
+                project?: string;
+                team?: string;
+                user?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeTaskRow"][];
                 };
             };
         };

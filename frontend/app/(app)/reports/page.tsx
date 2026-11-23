@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { BarChartCard } from "@/components/common/bar-chart";
 import { PeoplePicker, type Person } from "@/components/common/people-picker";
+import { MemberTaskChart, TaskHoursStats, TaskLogTable, TaskTotalsChart } from "@/components/reports/task-hours";
 import { Can } from "@/components/layout/guards";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/form";
@@ -99,6 +100,7 @@ function ReportView() {
     date_to: filters.date_to, project: filters.project, team: filters.team });
   const time = $api.useQuery("get", "/api/v1/reports/time/", { params: { query } }, { enabled: filters.report === "time" });
   const tasks = $api.useQuery("get", "/api/v1/reports/tasks/", { params: { query } }, { enabled: filters.report === "tasks" });
+  const byTask = $api.useQuery("get", "/api/v1/reports/time/tasks/", { params: { query } }, { enabled: filters.report === "time" });
   const totals = useMemo(() => {
     const map = new Map<string, number>();
     if (filters.report === "time") for (const r of time.data ?? []) map.set(r.group, (map.get(r.group) ?? 0) + r.hours);
@@ -111,6 +113,17 @@ function ReportView() {
         <ReportFilters value={filters} onChange={setFilters} />
         <div className="flex justify-end p-3"><ExportButtons filters={filters} /></div>
       </Card>
+      {filters.report === "time" && (
+        <QueryState query={byTask}>
+          {(rows) => (
+            <>
+              <TaskHoursStats rows={rows} />
+              <MemberTaskChart rows={rows} />
+              <TaskTotalsChart rows={rows} />
+            </>
+          )}
+        </QueryState>
+      )}
       <BarChartCard horizontal title={filters.report === "time" ? "Hours in range" : "Tasks completed in range"}
                     description={`By ${filters.group_by}`} data={totals.slice(0, 15)}
                     format={filters.report === "time" ? (v) => `${v}h` : undefined} />
@@ -160,6 +173,7 @@ function ReportView() {
           </QueryState>
         )}
       </Card>
+      {filters.report === "time" && byTask.data && <TaskLogTable rows={byTask.data} />}
     </div>
   );
 }
