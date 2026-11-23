@@ -1,0 +1,9 @@
+<!doctype html>
+<html><body style="font-family:Arial,sans-serif;background:#f7f5fc;padding:24px;color:#2e2640">
+<div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e6e0f5">
+<p style="margin-top:0">Hi {{ first_name }},</p>
+<h3 style="color:#6d4fc2;margin:8px 0 12px">{{ title }}</h3>
+{% if body %}<p style="white-space:pre-line">{{ body }}</p>{% endif %}
+<p style="text-align:center;margin:24px 0"><a href="{{ link }}" style="background:#7c5cd6;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none">Open in TaskTrack</a></p>
+<p style="font-size:12px;color:#6b6280">You can change which emails you receive in Settings &rsaquo; Notifications.</p>
+</div></body></html>

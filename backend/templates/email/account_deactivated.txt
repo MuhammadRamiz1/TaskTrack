@@ -1,0 +1,4 @@
+Hi {{ first_name }},
+
+Your {{ company_name }} account on TaskTrack has been deactivated and all sessions were signed out.
+Contact HR if you think this is a mistake.

@@ -1,23 +1,60 @@
 [project]
 name = "tasktrack"
 version = "0.1.0"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
-    "celery>=5.7.0",
+    "celery[redis]>=5.7.0",
+    "cryptography>=50.0.2",
     "django>=6.1.3",
+    "django-cors-headers>=4.9.0",
     "django-environ>=0.14.0",
+    "django-filter>=26.2",
+    "django-storages[s3]>=1.14.6",
     "djangorestframework>=3.18.3",
+    "djangorestframework-simplejwt>=5.5.1",
     "drf-spectacular>=0.30.0",
     "gunicorn>=27.0.1",
+    "openpyxl>=3.1.5",
     "psycopg[binary]>=3.3.9",
+    "pyotp>=2.12.1",
     "redis>=8.1.0",
+    "reportlab>=5.1.0",
+    "sentry-sdk[django]>=2.75.0",
+    "structlog>=26.1.0",
     "whitenoise>=6.12.0",
 ]
 
 [dependency-groups]
 dev = [
+    "factory-boy>=3.3.3",
+    "freezegun>=1.5.5",
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
     "pytest-django>=4.14.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.5",
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers -q"
+filterwarnings = ["ignore::DeprecationWarning:celery.*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["venv", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S", "BLE", "A", "N"]
+# N818: domain errors are named after HTTP semantics (NotFound, Conflict), not *Error.
+ignore = ["S101", "S105", "S106", "S608", "DJ001", "DJ008", "B904", "N818"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"config/settings/*" = ["F405"]
+"apps/*/migrations/*" = ["E501", "N806"]  # generated or historical-model code
+"apps/rbac/catalogue.py" = ["E741"]  # single-letter scope aliases keep the grant tables readable

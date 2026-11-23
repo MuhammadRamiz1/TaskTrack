@@ -1,0 +1,5 @@
+Hi {{ first_name }},
+
+Your account was locked for {{ minutes }} minutes after too many failed sign-in attempts.
+
+If this was not you, reset your password: {{ reset_link }}

@@ -1,70 +1,72 @@
-from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
+import uuid
+
 from django.db import models
-
-from apps.core.models import BaseModel
-
-
-class ImmutableError(Exception):
-    """Raised on any attempt to modify or delete audit records."""
 
 
 class AuditLogQuerySet(models.QuerySet):
     def update(self, **kwargs):
-        raise ImmutableError("Audit log entries cannot be updated.")
+        raise PermissionError("Audit log entries are append-only.")
 
     def delete(self):
-        raise ImmutableError("Audit log entries cannot be deleted.")
+        raise PermissionError("Audit log entries are append-only.")
 
 
-class AuditLog(BaseModel):
-    """Append-only record of who did what and when (FR-52, FR-53)."""
+class AuditLogManager(models.Manager.from_queryset(AuditLogQuerySet)):
+    """Tenant-aware like TenantManager, but company may be NULL (platform events)."""
 
-    class Action(models.TextChoices):
-        CREATE = "create", "Create"
-        UPDATE = "update", "Update"
-        DELETE = "delete", "Delete"
-        ASSIGN = "assign", "Assign"
-        APPROVE = "approve", "Approve"
-        REJECT = "reject", "Reject"
-        ROLE_CHANGE = "role_change", "Role change"
-        SETTING_CHANGE = "setting_change", "Setting change"
-        LOGIN = "login", "Login"
-        OTHER = "other", "Other"
+    def get_queryset(self):
+        from apps.common import tenancy
 
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="audit_entries",
-    )
-    actor_email = models.EmailField(blank=True, help_text="Kept even if the user is later removed.")
-    action = models.CharField(max_length=20, choices=Action.choices, db_index=True)
+        qs = super().get_queryset()
+        state = tenancy.current()
+        if state.mode == tenancy.Mode.TENANT:
+            return qs.filter(company_id=state.company_id)
+        if state.mode == tenancy.Mode.PLATFORM:
+            return qs
+        raise tenancy.TenantContextMissing("AuditLog queried without a tenant context.")
 
-    content_type = models.ForeignKey(ContentType, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    object_id = models.CharField(max_length=64, blank=True)
-    object_repr = models.CharField(max_length=255, blank=True)
 
-    changes = models.JSONField(default=dict, blank=True, help_text='{"field": {"old": ..., "new": ...}}')
-    ip_address = models.GenericIPAddressField(null=True, blank=True)
+class AuditLog(models.Model):
+    """Append-only security record of every mutation.
 
-    objects = AuditLogQuerySet.as_manager()
+    IDs are stored as plain UUIDs (no foreign keys) so entries outlive the rows they
+    describe. A database trigger rejects UPDATE and DELETE, and the runtime role has
+    only INSERT and SELECT on this table.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    company_id = models.UUIDField(null=True, blank=True)
+    actor_id = models.UUIDField(null=True, blank=True)
+    actor_email = models.CharField(max_length=254, blank=True)
+    impersonator_id = models.UUIDField(null=True, blank=True)
+    action = models.CharField(max_length=80)
+    entity_type = models.CharField(max_length=60, blank=True)
+    entity_id = models.CharField(max_length=64, blank=True)
+    old_value = models.JSONField(null=True, blank=True)
+    new_value = models.JSONField(null=True, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    request_id = models.CharField(max_length=64, blank=True)
+
+    objects = AuditLogManager()
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["content_type", "object_id"], name="audit_target_idx"),
-            models.Index(fields=["actor", "-created_at"], name="audit_actor_time_idx"),
+            models.Index(fields=["company_id", "-created_at"], name="audit_company_time_idx"),
+            models.Index(fields=["entity_type", "entity_id"], name="audit_entity_idx"),
+            models.Index(fields=["actor_id", "-created_at"], name="audit_actor_time_idx"),
+            models.Index(fields=["action"], name="audit_action_idx"),
         ]
 
     def __str__(self):
-        return f"{self.created_at:%Y-%m-%d %H:%M} {self.actor_email or 'system'} {self.action} {self.object_repr}"
+        return f"{self.created_at:%Y-%m-%d %H:%M:%S} {self.action} {self.entity_type}:{self.entity_id}"
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
-            raise ImmutableError("Audit log entries cannot be modified.")
+            raise PermissionError("Audit log entries are append-only.")
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        raise ImmutableError("Audit log entries cannot be deleted.")
+        raise PermissionError("Audit log entries are append-only.")

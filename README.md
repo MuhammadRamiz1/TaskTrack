@@ -59,7 +59,7 @@ docker compose ps        # all four services should be Up (db healthy)
 
 | Service | URL / host port | Notes |
 | --- | --- | --- |
-| Frontend | http://localhost:3000 | Next.js dev server |
+| Frontend | http://localhost:3001 | Next.js dev server |
 | Backend | http://localhost:8000 | Django `runserver` with auto-reload |
 | PostgreSQL | `localhost:4000` | for DBeaver, psql, etc. |
 | Redis | `localhost:4001` | |
@@ -152,7 +152,7 @@ sudo systemctl restart docker
 
 **`lookup ghcr.io ... i/o timeout`.** Flaky upstream DNS. Set public DNS in systemd-resolved (`/etc/systemd/resolved.conf.d/dns.conf` with `DNS=8.8.8.8 1.1.1.1`), then restart `systemd-resolved` and `docker`.
 
-**`port is already allocated`.** Another process is using the port. Find it with `sudo ss -ltnp | grep :3000`, then stop it or remap the host port in `docker-compose.yaml`.
+**`port is already allocated`.** Another process is using the port. Find it with `sudo ss -ltnp | grep :3001`, then stop it or remap the host port in `docker-compose.yaml`.
 
 **Backend cannot connect to Postgres (`127.0.0.1:4000`).** Settings must read `DATABASE_URL`. Inside Docker the host is `db:5432`, not `localhost:4000`.
 

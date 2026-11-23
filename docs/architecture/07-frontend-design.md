@@ -1,0 +1,81 @@
+# 07. Frontend Design
+
+## 7.1 Visual direction
+
+- **Primary colour: light purple (lavender/violet).** Soft, low-saturation surfaces with a
+  stronger violet for actions and focus.
+- **Smooth colouring.** Gentle gradients on hero areas and the sidebar header, subtle tinted
+  surfaces instead of hard grey borders, rounded corners (`--radius: 0.75rem`), soft shadows,
+  150-200 ms colour and background transitions. Respects `prefers-reduced-motion`.
+- **Light and dark themes** plus "System". Toggle in the top bar and in Profile settings.
+  Implemented with `next-themes` (`attribute="class"`), choice stored in `localStorage`, no
+  flash on load (script injected before paint).
+- **Contrast.** All text/background pairs meet WCAG AA (4.5:1 body, 3:1 large text and UI
+  components). Status colours are always paired with an icon or label, never colour alone.
+
+## 7.2 Theme tokens
+
+Defined as CSS variables in `app/globals.css` and mapped into Tailwind v4 with
+`@theme inline`. shadcn/ui components consume the same names. Values in OKLCH.
+
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `--background` | `oklch(0.985 0.008 300)` (near-white lavender) | `oklch(0.17 0.025 290)` (deep aubergine) | Page |
+| `--foreground` | `oklch(0.24 0.04 290)` | `oklch(0.95 0.015 300)` | Body text |
+| `--card` | `oklch(1 0 0)` | `oklch(0.21 0.03 290)` | Cards, panels |
+| `--muted` | `oklch(0.96 0.018 300)` | `oklch(0.26 0.03 290)` | Subtle fills, table stripes |
+| `--muted-foreground` | `oklch(0.50 0.04 290)` | `oklch(0.74 0.03 295)` | Secondary text |
+| `--primary` | `oklch(0.58 0.17 295)` (violet) | `oklch(0.74 0.13 300)` (light lavender) | Buttons, links, active nav |
+| `--primary-foreground` | `oklch(0.99 0.005 300)` | `oklch(0.18 0.03 290)` | Text on primary |
+| `--secondary` | `oklch(0.94 0.035 300)` (lavender tint) | `oklch(0.30 0.05 295)` | Secondary buttons, chips |
+| `--accent` | `oklch(0.92 0.05 310)` (lilac) | `oklch(0.33 0.07 305)` | Hover, selected rows |
+| `--border` / `--input` | `oklch(0.91 0.02 300)` | `oklch(0.32 0.03 290)` | Lines, inputs |
+| `--ring` | `oklch(0.66 0.15 295)` | `oklch(0.74 0.13 300)` | Focus ring (2px, offset 2px) |
+| `--sidebar` | gradient `oklch(0.97 0.02 300)` to `oklch(0.95 0.035 305)` | gradient `oklch(0.19 0.03 290)` to `oklch(0.22 0.045 300)` | Sidebar |
+| `--destructive` | `oklch(0.58 0.21 25)` | `oklch(0.68 0.19 25)` | Delete, errors |
+| `--success` | `oklch(0.60 0.14 155)` | `oklch(0.72 0.14 155)` | Completed, approved |
+| `--warning` | `oklch(0.75 0.15 75)` | `oklch(0.80 0.14 80)` | Due soon, on hold |
+| `--info` | `oklch(0.62 0.12 240)` | `oklch(0.72 0.11 240)` | In review |
+
+Status badge mapping (tinted background + darker text in light mode, inverse in dark):
+BACKLOG muted, ASSIGNED secondary, IN_PROGRESS primary, IN_REVIEW info, ON_HOLD warning,
+BLOCKED destructive, REOPENED accent, COMPLETED success, CANCELLED muted with strikethrough.
+
+Charts (Recharts) read `--chart-1..6`: a violet-led palette (violet, lilac, sky, teal,
+amber, rose) tuned separately for light and dark, so series stay distinguishable in both.
+
+Typography: `Inter` (Google Fonts via `next/font`), 14 px base on desktop, 15 px on mobile,
+tabular numbers for timers and tables.
+
+## 7.3 Responsive layout
+
+Mobile-first Tailwind breakpoints: `sm 640`, `md 768`, `lg 1024`, `xl 1280`.
+
+| Element | Mobile (< 768) | Tablet (768-1023) | Desktop (>= 1024) |
+| --- | --- | --- | --- |
+| Sidebar | Hidden; hamburger opens a `Sheet` drawer; bottom nav with 4 primary items (Dashboard, My Tasks, Timer, Notifications) | Collapsed icon rail, expands on hover/focus | Full sidebar, collapsible |
+| Top bar | Title, search icon, theme toggle, avatar menu | Full search field | Full search, breadcrumbs |
+| Running timer bar | Sticky above bottom nav, compact (task key, elapsed, pause/stop) | Sticky top | Sticky top |
+| Data tables | Card list (one card per row, key fields), filters in a bottom sheet | Table with horizontal-priority columns hidden | Full table |
+| Kanban | One column at a time with swipeable status tabs; drag disabled, status changed via "Move to" menu (same transition API) | 2-3 visible columns, horizontal scroll inside the board only | All columns |
+| Calendar | Agenda list view | Week view | Month view |
+| Task detail | Single column, sections as accordions, sticky action bar (Start timer, Submit) | Single column | Two columns: content left, meta/review/time right |
+| Dashboards | Stat tiles 2 per row, charts stacked full width | 3 per row | 4-6 per row, charts in grid |
+| Dialogs | Full-screen sheets | Centered dialog | Centered dialog |
+
+Rules: no horizontal page scroll at 360 px width; touch targets at least 44x44 px;
+16 px side gutter on mobile; inputs at least 16 px font on mobile to prevent iOS zoom.
+
+## 7.4 Frontend architecture
+
+| Concern | Choice |
+| --- | --- |
+| Data | TanStack Query via `openapi-react-query` (`$api.useQuery` / `$api.useMutation`) over types generated by `openapi-typescript`. Query keys are `[method, path, params]`. Mutations invalidate affected keys; transitions and timer use optimistic updates with rollback on error |
+| Auth | Access token in a module-level store (memory). On load, `AuthProvider` calls `/auth/refresh` (cookie) then `/auth/me`. A single in-flight refresh is shared by concurrent 401s |
+| Guards | `proxy.ts` redirects to `/login` when the `tt_session` hint cookie is absent. Layouts for `(platform)` and `(app)` check `/me` (super admin vs company user, `must_change_password`, 2FA enrolment). `<Can perm="task.assign">` hides controls. Server enforces everything |
+| Forms | React Hook Form + Zod; server `validation_error.details` mapped onto fields |
+| States | Every query view renders Skeleton (loading), EmptyState (with a primary action when allowed), ErrorState (message + retry + request id) |
+| Accessibility | shadcn/ui (Radix) primitives, visible focus ring, skip-to-content link, `aria-live` for timer and toasts, keyboard drag-and-drop on kanban (dnd-kit keyboard sensor), `axe` checks in Playwright |
+| Kanban drag | dnd-kit. Drop calls `POST /tasks/{id}/transition/`; if the rule needs a comment, a dialog asks for it first; on 409 the card snaps back and the reason is shown |
+| Timer | `useCurrentTimer` polls `/time/timer/current/` every 60 s and on focus; elapsed time ticks locally from server `started_at` and server clock offset |
+| Notifications | Unread count polled every 30 s; list page with cursor pagination |
