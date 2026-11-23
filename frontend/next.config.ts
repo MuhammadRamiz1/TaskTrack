@@ -25,8 +25,15 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // Django URLs end in "/" (APPEND_SLASH). Next strips trailing slashes by default
+  // (308 /x/ -> /x), so POSTs reached Django without the slash and failed. Keep the
+  // slash: skip the redirect and forward the slashed path as-is.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
+    return [
+      { source: "/api/:path*/", destination: `${apiOrigin}/api/:path*/` },
+      { source: "/api/:path*", destination: `${apiOrigin}/api/:path*` },
+    ];
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
