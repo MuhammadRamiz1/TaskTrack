@@ -29,7 +29,9 @@ import { ApiError, errorMessage } from "@/lib/api/errors";
 import type { components } from "@/lib/api/schema";
 import { cn, formatDate } from "@/lib/utils";
 
-import { PriorityBadge, STATUS_META, StatusBadge, STATUSES, type TaskStatus } from "./meta";
+import { AssignDialog, ReviewerDialog } from "./board-dialogs";
+import { BOARD_ROWS, canDrop, planDrop } from "./board-moves";
+import { PriorityBadge, STATUS_META, StatusBadge, type TaskStatus } from "./meta";
 
 export type TaskSummary = components["schemas"]["TaskSummary"];
 
@@ -127,7 +129,32 @@ export function useMoveTask(onSettled?: () => void) {
   return { move, dialog, busy };
 }
 
-function BoardCard({ task, onMove }: { task: TaskSummary; onMove: (to: TaskStatus) => void }) {
+type BoardCardData = components["schemas"]["BoardCard"];
+type BoardData = components["schemas"]["BoardOutput"];
+const BOARD_KEY = ["get", "/api/v1/tasks/board/"];
+
+type BoardStep =
+  | { kind: "transition"; comment: string }
+  | { kind: "assign"; userIds: string[] }
+  | { kind: "submit"; reviewerId?: string }
+  | { kind: "approve"; comment: string }
+  | { kind: "request_changes"; comment: string };
+
+type PendingDialog = { card: BoardCardData; to: TaskStatus; dialog: "assign" | "reviewer" | "comment" | "approve" | "changes" };
+
+function moveInCache(data: BoardData, id: string, to: TaskStatus): BoardData {
+  const card = data.columns.flatMap((c) => c.tasks).find((t) => t.id === id);
+  if (!card) return data;
+  return {
+    ...data,
+    columns: data.columns.map((c) => {
+      const rest = c.tasks.filter((t) => t.id !== id);
+      return c.status === to ? { ...c, tasks: [{ ...card, status: to }, ...rest] } : { ...c, tasks: rest };
+    }),
+  };
+}
+
+function BoardCard({ task, onMove }: { task: BoardCardData; onMove: (to: TaskStatus) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, data: task });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
   return (
@@ -150,9 +177,22 @@ function BoardCard({ task, onMove }: { task: TaskSummary; onMove: (to: TaskStatu
           {task.title}
         </Link>
       </div>
+      {(task.status === "BLOCKED" || task.needs_reassignment) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {task.status === "BLOCKED" && <Badge tone="danger">Blocked</Badge>}
+          {task.needs_reassignment && <Badge tone="warning">Needs reassignment</Badge>}
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between gap-2">
         <Assignees task={task} max={2} />
-        <Due task={task} />
+        <span className="flex items-center gap-2">
+          {task.status === "IN_REVIEW" && task.reviewer && (
+            <span aria-label={`Reviewer: ${task.reviewer.full_name}`} title={`Reviewer: ${task.reviewer.full_name}`}>
+              <Avatar name={task.reviewer.full_name} className="size-6 ring-2 ring-surface" />
+            </span>
+          )}
+          <Due task={task} />
+        </span>
       </div>
       <Select
         aria-label={`Move ${task.key} to`}
@@ -161,20 +201,23 @@ function BoardCard({ task, onMove }: { task: TaskSummary; onMove: (to: TaskStatu
         onChange={(e) => e.target.value && onMove(e.target.value as TaskStatus)}
       >
         <option value="">Move to…</option>
-        {STATUSES.filter((s) => s.value !== task.status).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        {task.allowed_moves.map((m) => <option key={m.to_status} value={m.to_status}>{STATUS_META[m.to_status].label}</option>)}
       </Select>
     </article>
   );
 }
 
-function Column({ status, tasks, onMove }: { status: TaskStatus; tasks: TaskSummary[]; onMove: (t: TaskSummary, to: TaskStatus) => void }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+function Column({ status, tasks, dimmed, onMove }: {
+  status: TaskStatus; tasks: BoardCardData[]; dimmed: boolean; onMove: (t: BoardCardData, to: TaskStatus) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status, disabled: dimmed });
   return (
     <section
       ref={setNodeRef}
       aria-label={`${STATUS_META[status].label}, ${tasks.length} tasks`}
       className={cn(
-        "flex w-[82vw] shrink-0 snap-start flex-col rounded-2xl bg-surface-2 p-2.5 transition-colors sm:w-72",
+        "flex min-w-0 flex-col rounded-2xl bg-surface-2 p-2.5 transition-[background-color,opacity]",
+        dimmed && "opacity-40",
         isOver && "bg-primary-100 ring-2 ring-primary-300",
       )}
     >
@@ -190,28 +233,134 @@ function Column({ status, tasks, onMove }: { status: TaskStatus; tasks: TaskSumm
 }
 
 export function TaskBoard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
   const board = $api.useQuery("get", "/api/v1/tasks/board/", { params: { query: { project: projectId } } });
-  const { move, dialog } = useMoveTask();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
-  const onDragEnd = (e: DragEndEvent) => {
-    const task = e.active.data.current as TaskSummary | undefined;
-    const to = e.over?.id as TaskStatus | undefined;
-    if (task && to && to !== task.status) void move(task, to);
+  const [active, setActive] = useState<BoardCardData | null>(null);
+  const [pending, setPending] = useState<PendingDialog | null>(null);
+
+  const call = async (card: BoardCardData, to: TaskStatus, step: BoardStep) => {
+    const path = { params: { path: { task_id: card.id } } };
+    switch (step.kind) {
+      case "transition":
+        return api.POST("/api/v1/tasks/{task_id}/transition/", { ...path, body: { to_status: to, comment: step.comment, version: card.version } });
+      case "assign":
+        return api.POST("/api/v1/tasks/{task_id}/assignees/", { ...path, body: { user_ids: step.userIds } });
+      case "submit":
+        if (step.reviewerId) await api.PATCH("/api/v1/tasks/{task_id}/", { ...path, body: { reviewer_id: step.reviewerId, version: card.version } });
+        return api.POST("/api/v1/tasks/{task_id}/review/submit/", { ...path, body: { note: "" } });
+      case "approve":
+        return api.POST("/api/v1/tasks/{task_id}/review/approve/", { ...path, body: { comment: step.comment } });
+      case "request_changes":
+        return api.POST("/api/v1/tasks/{task_id}/review/request-changes/", { ...path, body: { comment: step.comment } });
+    }
   };
+
+  /** Moves the card in the cache at once, then rolls back and reports if the server refuses. */
+  const execute = async (card: BoardCardData, to: TaskStatus, step: BoardStep) => {
+    setPending(null);
+    await qc.cancelQueries({ queryKey: BOARD_KEY });
+    const snapshot = qc.getQueriesData<BoardData>({ queryKey: BOARD_KEY });
+    qc.setQueriesData<BoardData>({ queryKey: BOARD_KEY }, (d) => (d ? moveInCache(d, card.id, to) : d));
+    try {
+      await call(card, to, step);
+      toast.success(`${card.key} → ${STATUS_META[to].label}`);
+    } catch (error) {
+      for (const [key, data] of snapshot) qc.setQueryData(key, data);
+      if (error instanceof ApiError && error.code === "reviewer_required" && step.kind === "submit") setPending({ card, to, dialog: "reviewer" });
+      else if (error instanceof ApiError && error.code === "comment_required" && step.kind === "transition") setPending({ card, to, dialog: "comment" });
+      else toast.error(errorMessage(error));
+    } finally {
+      void qc.invalidateQueries({ queryKey: BOARD_KEY });
+      void qc.invalidateQueries({ queryKey: ["get", "/api/v1/tasks/"] });
+    }
+  };
+
+  const start = (card: BoardCardData, to: TaskStatus) => {
+    const plan = planDrop(card, to);
+    if (!plan) return;
+    switch (plan.kind) {
+      case "transition":
+        if (plan.needsComment) setPending({ card, to, dialog: "comment" });
+        else void execute(card, to, { kind: "transition", comment: "" });
+        break;
+      case "assign": setPending({ card, to, dialog: "assign" }); break;
+      case "submit": void execute(card, to, { kind: "submit" }); break;
+      case "approve": setPending({ card, to, dialog: "approve" }); break;
+      case "request_changes": setPending({ card, to, dialog: "changes" }); break;
+    }
+  };
+
+  const onDragEnd = (e: DragEndEvent) => {
+    const card = e.active.data.current as BoardCardData | undefined;
+    const to = e.over?.id as TaskStatus | undefined;
+    setActive(null);
+    if (card && to) start(card, to);
+  };
+
+  const cancel = () => setPending(null);
+  const p = pending;
   return (
     <QueryState query={board}>
-      {(data) => {
-        const columns = data.columns;
-        const visible = columns.filter((c) => c.status !== "CANCELLED" || c.tasks.length);
-        return (
-          <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-            <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0">
-              {visible.map((c) => <Column key={c.status} status={c.status} tasks={c.tasks} onMove={(t, to) => void move(t, to)} />)}
-            </div>
-            {dialog}
-          </DndContext>
-        );
-      }}
+      {(data) => (
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e) => setActive((e.active.data.current as BoardCardData | undefined) ?? null)}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActive(null)}
+        >
+          <div className="flex flex-col gap-3 pb-4">
+            {BOARD_ROWS.map((row, i) => (
+              <div key={i} data-testid="board-row"
+                   className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2", i === 0 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
+                {row.map((status) => (
+                  <Column
+                    key={status}
+                    status={status}
+                    tasks={data.columns.find((c) => c.status === status)?.tasks ?? []}
+                    dimmed={Boolean(active) && active!.status !== status && !canDrop(active!, status)}
+                    onMove={start}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+          <AssignDialog taskKey={p?.card.key ?? ""} open={p?.dialog === "assign"} onCancel={cancel}
+                        onConfirm={(userIds) => p && void execute(p.card, p.to, { kind: "assign", userIds })} />
+          <ReviewerDialog taskKey={p?.card.key ?? ""} open={p?.dialog === "reviewer"} onCancel={cancel}
+                          onConfirm={(reviewerId) => p && void execute(p.card, p.to, { kind: "submit", reviewerId })} />
+          <ConfirmDialog
+            open={p?.dialog === "comment"}
+            onOpenChange={(o) => !o && cancel()}
+            title={p ? `Move ${p.card.key} to ${STATUS_META[p.to].label}` : ""}
+            description="This status change needs a comment."
+            reasonLabel={p?.to === "BLOCKED" ? "What is blocking it?" : "Comment"}
+            reasonRequired
+            confirmLabel="Move task"
+            onConfirm={(comment) => p && void execute(p.card, p.to, { kind: "transition", comment })}
+          />
+          <ConfirmDialog
+            open={p?.dialog === "approve"}
+            onOpenChange={(o) => !o && cancel()}
+            title={p ? `Approve ${p.card.key}?` : ""}
+            description="The task becomes COMPLETED and read-only."
+            reasonLabel="Comment (optional)"
+            confirmLabel="Approve"
+            onConfirm={(comment) => p && void execute(p.card, p.to, { kind: "approve", comment })}
+          />
+          <ConfirmDialog
+            open={p?.dialog === "changes"}
+            onOpenChange={(o) => !o && cancel()}
+            title="Request changes"
+            description="The task goes back to IN_PROGRESS."
+            reasonLabel="What needs to change?"
+            reasonRequired
+            confirmLabel="Request changes"
+            danger
+            onConfirm={(comment) => p && void execute(p.card, p.to, { kind: "request_changes", comment })}
+          />
+        </DndContext>
+      )}
     </QueryState>
   );
 }
