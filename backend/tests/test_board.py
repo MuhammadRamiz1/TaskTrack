@@ -1,5 +1,6 @@
 """Kanban board: per-card allowed moves."""
 
+import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
@@ -102,16 +103,29 @@ def test_completed_task_moves_by_role(world):
     assert moves(f.client_for(world.member), world, task) == {}
 
 
-def test_board_query_count_is_constant(world):
+def _populate(world, n):
+    """n backlog, n assigned, n in-progress and n in-review tasks."""
+    member = f.client_for(world.member)
+    for _ in range(n):
+        f.make_task(world.project, world.manager)
+        f.make_task(world.project, world.manager, assignees=[world.member])
+        for review in (False, True):
+            task = f.make_task(world.project, world.manager, assignees=[world.member])
+            to_progress(world, task)
+            if review:
+                assert member.post(f"{T}{task.pk}/review/submit/", {}, format="json").status_code == 201
+
+
+@pytest.mark.parametrize("who", ["admin", "manager", "lead", "member"])
+def test_board_query_count_is_constant(world, who):
+    client = f.client_for(getattr(world, who))
+
     def count():
-        client = f.client_for(world.manager)
         with CaptureQueriesContext(connection) as ctx:
             assert client.get(BOARD, {"project": str(world.project.pk)}).status_code == 200
         return len(ctx)
 
-    for _ in range(3):
-        f.make_task(world.project, world.manager, assignees=[world.member])
+    _populate(world, 1)
     small = count()
-    for _ in range(12):
-        f.make_task(world.project, world.manager, assignees=[world.member])
+    _populate(world, 4)
     assert count() == small
