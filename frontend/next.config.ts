@@ -12,7 +12,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["10.0.0.161"],
+  allowedDevOrigins: ["10.0.0.161","10.0.0.130"],
   experimental: {
     agentFeedback: true,
   },
