@@ -322,9 +322,28 @@ class WorkloadOutput(serializers.Serializer):
     load_percent = serializers.IntegerField(allow_null=True)
 
 
+class AllowedMove(serializers.Serializer):
+    to_status = serializers.ChoiceField(choices=Status.choices)
+    action = serializers.ChoiceField(choices=["transition", "assign", "submit", "approve", "request_changes"])
+    requires_comment = serializers.BooleanField()
+
+
+class BoardCard(TaskSummary):
+    allowed_moves = serializers.SerializerMethodField()
+
+    class Meta(TaskSummary.Meta):
+        fields = [*TaskSummary.Meta.fields, "allowed_moves"]
+
+    @extend_schema_field(AllowedMove(many=True))
+    def get_allowed_moves(self, task) -> list[dict]:
+        from .board import allowed_moves
+
+        return allowed_moves(self.context["request"].user, task, rules=self.context["rules"])
+
+
 class BoardColumnOutput(serializers.Serializer):
     status = serializers.ChoiceField(choices=Status.choices)
-    tasks = TaskSummary(many=True)
+    tasks = BoardCard(many=True)
 
 
 class BoardOutput(serializers.Serializer):

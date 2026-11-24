@@ -1622,84 +1622,6 @@
                 }
             }
         },
-        "/api/v1/hr/employees/import/": {
-            "post": {
-                "operationId": "hr_employees_import_create",
-                "summary": "Create employees from a sheet and email each an invite link",
-                "tags": [
-                    "hr"
-                ],
-                "requestBody": {
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/EmployeeImportInputRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EmployeeImportOutput"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/v1/hr/employees/import/preview/": {
-            "post": {
-                "operationId": "hr_employees_import_preview_create",
-                "summary": "Check an employee sheet without creating anyone",
-                "tags": [
-                    "hr"
-                ],
-                "requestBody": {
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/EmployeeImportInputRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EmployeeImportOutput"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ]
-            }
-        },
         "/api/v1/hr/employees/{user_id}/": {
             "get": {
                 "operationId": "hr_employees_retrieve",
@@ -2375,6 +2297,84 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/DetailOutput"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/hr/employees/import/": {
+            "post": {
+                "operationId": "hr_employees_import_create",
+                "summary": "Create employees from a sheet and email each an invite link",
+                "tags": [
+                    "hr"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/EmployeeImportInputRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EmployeeImportOutput"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/hr/employees/import/preview/": {
+            "post": {
+                "operationId": "hr_employees_import_preview_create",
+                "summary": "Check an employee sheet without creating anyone",
+                "tags": [
+                    "hr"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/EmployeeImportInputRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EmployeeImportOutput"
                                 }
                             }
                         },
@@ -8717,6 +8717,17 @@
                     "user"
                 ]
             },
+            "ActionEnum": {
+                "enum": [
+                    "transition",
+                    "assign",
+                    "submit",
+                    "approve",
+                    "request_changes"
+                ],
+                "type": "string",
+                "description": "* `transition` - transition\n* `assign` - assign\n* `submit` - submit\n* `approve` - approve\n* `request_changes` - request_changes"
+            },
             "ActivityOutput": {
                 "type": "object",
                 "properties": {
@@ -8749,6 +8760,25 @@
                     "created_at",
                     "id",
                     "verb"
+                ]
+            },
+            "AllowedMove": {
+                "type": "object",
+                "properties": {
+                    "to_status": {
+                        "$ref": "#/components/schemas/TaskStatusEnum"
+                    },
+                    "action": {
+                        "$ref": "#/components/schemas/ActionEnum"
+                    },
+                    "requires_comment": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "action",
+                    "requires_comment",
+                    "to_status"
                 ]
             },
             "AllowedTransitionOutput": {
@@ -8966,6 +8996,121 @@
                     "id"
                 ]
             },
+            "BoardCard": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "key": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "number": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 300
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/TaskStatusEnum"
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/PriorityEnum"
+                    },
+                    "project": {
+                        "$ref": "#/components/schemas/ProjectBrief"
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "estimated_minutes": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true
+                    },
+                    "assignees": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AssigneeOutput"
+                        }
+                    },
+                    "reviewer": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/UserBrief"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "needs_reassignment": {
+                        "type": "boolean"
+                    },
+                    "is_read_only": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "is_overdue": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "version": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "allowed_moves": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AllowedMove"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "allowed_moves",
+                    "assignees",
+                    "created_at",
+                    "id",
+                    "is_overdue",
+                    "is_read_only",
+                    "key",
+                    "number",
+                    "parent_id",
+                    "project",
+                    "reviewer",
+                    "title",
+                    "updated_at"
+                ]
+            },
             "BoardColumnOutput": {
                 "type": "object",
                 "properties": {
@@ -8975,7 +9120,7 @@
                     "tasks": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/TaskSummary"
+                            "$ref": "#/components/schemas/BoardCard"
                         }
                     }
                 },
@@ -9874,7 +10019,8 @@
                     "created",
                     "failed"
                 ],
-                "type": "string"
+                "type": "string",
+                "description": "* `ready` - ready\n* `error` - error\n* `created` - created\n* `failed` - failed"
             },
             "EmployeeImportSummary": {
                 "type": "object",

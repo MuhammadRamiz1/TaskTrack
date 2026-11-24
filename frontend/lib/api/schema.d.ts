@@ -536,40 +536,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/hr/employees/import/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create employees from a sheet and email each an invite link */
-        post: operations["hr_employees_import_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/hr/employees/import/preview/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Check an employee sheet without creating anyone */
-        post: operations["hr_employees_import_preview_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/hr/employees/{user_id}/": {
         parameters: {
             query?: never;
@@ -755,6 +721,40 @@ export interface paths {
         put?: never;
         /** Set a temporary password (must be changed at next sign-in) */
         post: operations["hr_employees_temporary_password_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/employees/import/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create employees from a sheet and email each an invite link */
+        post: operations["hr_employees_import_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/employees/import/preview/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check an employee sheet without creating anyone */
+        post: operations["hr_employees_import_preview_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2355,6 +2355,15 @@ export interface components {
             access: string;
             user: components["schemas"]["MeOutput"];
         };
+        /**
+         * @description * `transition` - transition
+         *     * `assign` - assign
+         *     * `submit` - submit
+         *     * `approve` - approve
+         *     * `request_changes` - request_changes
+         * @enum {string}
+         */
+        ActionEnum: "transition" | "assign" | "submit" | "approve" | "request_changes";
         ActivityOutput: {
             /** Format: uuid */
             readonly id: string;
@@ -2363,6 +2372,11 @@ export interface components {
             data?: unknown;
             /** Format: date-time */
             readonly created_at: string;
+        };
+        AllowedMove: {
+            to_status: components["schemas"]["TaskStatusEnum"];
+            action: components["schemas"]["ActionEnum"];
+            requires_comment: boolean;
         };
         AllowedTransitionOutput: {
             to_status: components["schemas"]["TaskStatusEnum"];
@@ -2424,9 +2438,37 @@ export interface components {
             user_agent?: string;
             request_id?: string;
         };
+        BoardCard: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly key: string;
+            number: number;
+            title: string;
+            status?: components["schemas"]["TaskStatusEnum"];
+            priority?: components["schemas"]["PriorityEnum"];
+            project: components["schemas"]["ProjectBrief"];
+            /** Format: uuid */
+            parent_id: string | null;
+            /** Format: date */
+            start_date?: string | null;
+            /** Format: date */
+            due_date?: string | null;
+            estimated_minutes?: number | null;
+            assignees: components["schemas"]["AssigneeOutput"][];
+            reviewer: components["schemas"]["UserBrief"] | null;
+            needs_reassignment?: boolean;
+            readonly is_read_only: boolean;
+            readonly is_overdue: boolean;
+            version?: number;
+            /** Format: date-time */
+            readonly created_at: string;
+            /** Format: date-time */
+            readonly updated_at: string;
+            readonly allowed_moves: components["schemas"]["AllowedMove"][];
+        };
         BoardColumnOutput: {
             status: components["schemas"]["TaskStatusEnum"];
-            tasks: components["schemas"]["TaskSummary"][];
+            tasks: components["schemas"]["BoardCard"][];
         };
         BoardOutput: {
             project: components["schemas"]["ProjectBrief"];
@@ -2668,7 +2710,13 @@ export interface components {
             status: components["schemas"]["EmployeeImportRowStatusEnum"];
             errors: string[];
         };
-        /** @enum {string} */
+        /**
+         * @description * `ready` - ready
+         *     * `error` - error
+         *     * `created` - created
+         *     * `failed` - failed
+         * @enum {string}
+         */
         EmployeeImportRowStatusEnum: "ready" | "error" | "created" | "failed";
         EmployeeImportSummary: {
             total: number;
@@ -5009,52 +5057,6 @@ export interface operations {
             };
         };
     };
-    hr_employees_import_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["EmployeeImportInputRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EmployeeImportOutput"];
-                };
-            };
-        };
-    };
-    hr_employees_import_preview_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["EmployeeImportInputRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EmployeeImportOutput"];
-                };
-            };
-        };
-    };
     hr_employees_retrieve: {
         parameters: {
             query?: never;
@@ -5395,6 +5397,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DetailOutput"];
+                };
+            };
+        };
+    };
+    hr_employees_import_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["EmployeeImportInputRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeImportOutput"];
+                };
+            };
+        };
+    };
+    hr_employees_import_preview_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["EmployeeImportInputRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeImportOutput"];
                 };
             };
         };

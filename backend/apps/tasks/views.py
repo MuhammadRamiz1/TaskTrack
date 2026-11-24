@@ -230,10 +230,28 @@ class TaskBoardView(TenantAPIView):
             project = get_project(request.user, uuid.UUID(project_id))
         except ValueError as exc:
             raise InvalidInput(details={"project": ["Not a valid id."]}) from exc
-        tasks = selectors.visible_tasks(request.user).filter(project=project).order_by("-priority_rank", "due_date")
+        from apps.reviews.models import TaskReview
+
+        tasks = (
+            selectors.visible_tasks(request.user)
+            .filter(project=project)
+            .select_related("company")
+            .prefetch_related(
+                Prefetch(
+                    "reviews",
+                    queryset=TaskReview.objects.filter(decision=TaskReview.Decision.PENDING),
+                    to_attr="pending_reviews",
+                )
+            )
+            .order_by("-priority_rank", "due_date")
+        )
+        context = {
+            "request": request,
+            "rules": list(StatusTransitionRule.objects.filter(company_id=project.company_id, is_active=True)),
+        }
         columns = {value: [] for value in Status.values}
         for task in tasks:
-            columns[task.status].append(s.TaskSummary(task).data)
+            columns[task.status].append(s.BoardCard(task, context=context).data)
         return Response(
             {
                 "project": {"id": str(project.pk), "key": project.key, "name": project.name},
