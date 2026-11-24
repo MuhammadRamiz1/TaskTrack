@@ -75,6 +75,9 @@ describe("TaskBoard", () => {
     expect(names[1]).toEqual(["On hold", "Blocked", "Reopened", "Cancelled"]);
     expect(rows[0].className).toContain("lg:grid-cols-5");
     expect(rows[1].className).toContain("lg:grid-cols-4");
+    const html = rows[0].parentElement!.outerHTML;
+    for (const bad of ["overflow-x-auto", "snap-x", "-mx-4", "shrink-0", "w-[82vw]", "sm:w-72"]) expect(html).not.toContain(bad);
+    expect(region(/^Backlog,/).className).toContain("min-w-0");
   });
 
   it("dims columns not in allowed_moves while dragging", async () => {
