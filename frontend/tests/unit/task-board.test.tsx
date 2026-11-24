@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn(), toastError: vi.
 
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: mocks.toastSuccess } }));
 
+// Refetches after the first never resolve, so only the snapshot restore can put it back in Backlog.
+const fetches = { board: 0 };
 const STATUS_ORDER = ["BACKLOG", "ASSIGNED", "IN_PROGRESS", "IN_REVIEW", "COMPLETED", "ON_HOLD", "BLOCKED", "REOPENED", "CANCELLED"];
 
 function card(over: Record<string, unknown> = {}) {
@@ -42,7 +44,7 @@ vi.mock("@/lib/api/client", () => ({
         queryFn: async () =>
           path === "/api/v1/org/directory/"
             ? { results: [{ id: "u1", full_name: "Ann Lee", email: "ann@x.io", status: "ACTIVE" }] }
-            : board(),
+            : (fetches.board++ === 0 ? board() : new Promise<never>(() => {})),
       }),
   },
 }));
@@ -58,6 +60,7 @@ const region = (name: RegExp) => screen.getByRole("region", { name });
 afterEach(cleanup);
 
 beforeEach(() => {
+  fetches.board = 0;
   mocks.post.mockReset().mockResolvedValue({});
   mocks.patch.mockReset().mockResolvedValue({});
   mocks.toastError.mockReset();
