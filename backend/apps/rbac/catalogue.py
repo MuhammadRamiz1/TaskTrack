@@ -132,6 +132,12 @@ GRANTS: dict[RoleKey, dict[str, Scope]] = {
         "team.view": C,
         "team.manage": C,
         "project.view": C,
+        "task.view": C,
+        'report.view': C,
+        "task.workload.view": C,
+        "review.view": C,
+        "time.view": C,
+        "report.export": C,
     },
     RoleKey.MANAGER: {
         "leave.manage": T,
