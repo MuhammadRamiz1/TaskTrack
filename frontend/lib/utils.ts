@@ -11,6 +11,12 @@ function toDate(value: string | Date | null | undefined): Date | null {
   const d = typeof value === "string" ? parseISO(value) : value;
   return isValid(d) ? d : null;
 }
+/** Decimal hours → "hh:mm:ss". Hours can go past 24, e.g. "37:15:00". */
+export function formatDurationByHours(hours: number): string {
+  const total = Math.round((hours || 0) * 3600);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+}
 
 export function formatDate(value: string | Date | null | undefined, pattern = "d MMM yyyy") {
   const d = toDate(value);

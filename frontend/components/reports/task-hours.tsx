@@ -19,8 +19,19 @@ const SLOTS = ["var(--tt-chart-1)", "var(--tt-chart-2)", "var(--tt-chart-3)", "v
 const OTHER = "__other__";
 const OTHER_COLOR = "var(--tt-muted)";
 
-const round = (n: number) => Math.round(n * 100) / 100;
-const hrs = (n: number) => `${round(n)}h`;
+// After
+/** Round to the nearest second (still in hours) so sums stay exact. */
+const round = (n: number) => Math.round(n * 3600) / 3600;
+
+/** Decimal hours → "hh:mm:ss". Hours can go past 24, e.g. "37:15:00". */
+const pad = (x: number) => String(x).padStart(2, "0");
+const hrs = (n: number) => {
+  const total = Math.round(n * 3600);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+};
 
 type TaskInfo = { id: string; key: string; title: string; hours: number };
 
@@ -44,7 +55,7 @@ export function TaskHoursStats({ rows }: { rows: TaskHoursRow[] }) {
       <Stat label="Total hours" value={hrs(total)} />
       <Stat label="People" value={people} />
       <Stat label="Tasks worked on" value={tasks} />
-      <Stat label="Avg hours per active day" value={days ? hrs(total / days) : "0h"} hint={`${days} active day${days === 1 ? "" : "s"}`} />
+      <Stat label="Avg hours per active day" value={hrs(days ? total / days : 0)} hint={`${days} active day${days === 1 ? "" : "s"}`} />
     </div>
   );
 }
@@ -137,22 +148,22 @@ export function MemberTaskChart({ rows }: { rows: TaskHoursRow[] }) {
         </div>
       ) : (
         <div className="px-2 py-4" role="img"
-             aria-label={`${title}: ${data.map((d) => `${d.member} ${hrs(d.total as number)}`).join(", ")}`}>
+          aria-label={`${title}: ${data.map((d) => `${d.member} ${hrs(d.total as number)}`).join(", ")}`}>
           <ResponsiveContainer width="100%" height={height}>
             <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, bottom: 4, left: 8 }}>
               <CartesianGrid stroke="var(--tt-chart-grid)" horizontal={false} />
-              <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={(v) => `${v}h`}
-                     tick={{ fill: "var(--tt-muted)", fontSize: 12 }} />
+              <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={hrs}
+                tick={{ fill: "var(--tt-muted)", fontSize: 12 }} />
               <YAxis type="category" dataKey="member" width={130} tickLine={false} axisLine={false}
-                     tick={{ fill: "var(--tt-muted)", fontSize: 12 }} />
+                tick={{ fill: "var(--tt-muted)", fontSize: 12 }} />
               <Tooltip cursor={{ fill: "var(--tt-hover)" }} content={<StackTooltip names={names} />} />
               <Legend verticalAlign="top" align="left" iconType="square" iconSize={10}
-                      wrapperStyle={{ fontSize: 12, paddingBottom: 8, color: "var(--tt-muted)" }}
-                      formatter={(key: string) => <span className="text-muted">{names.get(key)}</span>} />
+                wrapperStyle={{ fontSize: 12, paddingBottom: 8, color: "var(--tt-muted)" }}
+                formatter={(key: string) => <span className="text-muted">{names.get(key)}</span>} />
               {series.map((s, i) => (
                 <Bar key={s.key} dataKey={s.key} stackId="hours" fill={s.color} maxBarSize={20}
-                     stroke="var(--tt-surface)" strokeWidth={2} isAnimationActive={false}
-                     radius={i === series.length - 1 ? [0, 4, 4, 0] : 0} />
+                  stroke="var(--tt-surface)" strokeWidth={2} isAnimationActive={false}
+                  radius={i === series.length - 1 ? [0, 4, 4, 0] : 0} />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -169,7 +180,7 @@ export function TaskTotalsChart({ rows }: { rows: TaskHoursRow[] }) {
     [rows],
   );
   return <BarChartCard horizontal title="Hours by task" description="Top 15 tasks in range" data={data} format={hrs}
-                       emptyText="No time logged in this range" />;
+    emptyText="No time logged in this range" />;
 }
 
 /** Audit log: employee > task > day, with subtotals per employee and per task. */

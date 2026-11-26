@@ -18,11 +18,13 @@ import { EmptyState, PageHeader, QueryState } from "@/components/ui/states";
 import { $api, downloadFile } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { components } from "@/lib/api/schema";
-import { cleanParams, formatBytes, formatDate, formatDateTime, titleCase } from "@/lib/utils";
+import { cleanParams, formatBytes, formatDate, formatDateTime, formatDurationByHours, titleCase } from "@/lib/utils";
 
 type ReportType = "time" | "tasks";
-type Filters = { report: ReportType; group_by: "member" | "team" | "project"; period: "daily" | "weekly" | "monthly";
-  date_from: string; date_to: string; project: string; team: string };
+type Filters = {
+  report: ReportType; group_by: "member" | "team" | "project"; period: "daily" | "weekly" | "monthly";
+  date_from: string; date_to: string; project: string; team: string
+};
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function useFilterOptions() {
@@ -96,8 +98,10 @@ function ReportView() {
     report: "time", group_by: "member", period: "weekly",
     date_from: format(subDays(today, 29), "yyyy-MM-dd"), date_to: format(today, "yyyy-MM-dd"), project: "", team: "",
   });
-  const query = cleanParams({ group_by: filters.group_by, period: filters.period, date_from: filters.date_from,
-    date_to: filters.date_to, project: filters.project, team: filters.team });
+  const query = cleanParams({
+    group_by: filters.group_by, period: filters.period, date_from: filters.date_from,
+    date_to: filters.date_to, project: filters.project, team: filters.team
+  });
   const time = $api.useQuery("get", "/api/v1/reports/time/", { params: { query } }, { enabled: filters.report === "time" });
   const tasks = $api.useQuery("get", "/api/v1/reports/tasks/", { params: { query } }, { enabled: filters.report === "tasks" });
   const byTask = $api.useQuery("get", "/api/v1/reports/time/tasks/", { params: { query } }, { enabled: filters.report === "time" });
@@ -105,7 +109,7 @@ function ReportView() {
     const map = new Map<string, number>();
     if (filters.report === "time") for (const r of time.data ?? []) map.set(r.group, (map.get(r.group) ?? 0) + r.hours);
     else for (const r of tasks.data ?? []) map.set(r.group, (map.get(r.group) ?? 0) + r.completed);
-    return [...map.entries()].map(([label, value]) => ({ label, value: Math.round(value * 100) / 100 })).sort((a, b) => b.value - a.value);
+    return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
   }, [filters.report, time.data, tasks.data]);
   return (
     <div className="flex flex-col gap-5">
@@ -125,8 +129,8 @@ function ReportView() {
         </QueryState>
       )}
       <BarChartCard horizontal title={filters.report === "time" ? "Hours in range" : "Tasks completed in range"}
-                    description={`By ${filters.group_by}`} data={totals.slice(0, 15)}
-                    format={filters.report === "time" ? (v) => `${v}h` : undefined} />
+        description={`By ${filters.group_by}`} data={totals.slice(0, 15)}
+        format={filters.report === "time" ? formatDurationByHours : undefined} />
       <Card>
         <CardHeader title="Breakdown" description={`${titleCase(filters.period)} buckets`} />
         {filters.report === "time" ? (
@@ -137,12 +141,12 @@ function ReportView() {
                   <caption className="sr-only">Hours report</caption>
                   <thead><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
                     <th scope="col" className="px-5 py-2.5">{titleCase(filters.group_by)}</th><th scope="col" className="px-3 py-2.5">Period</th>
-                    <th scope="col" className="px-3 py-2.5 text-right">Hours</th><th scope="col" className="px-5 py-2.5 text-right">Entries</th>
+                    <th scope="col" className="px-3 py-2.5 text-right">Time</th><th scope="col" className="px-5 py-2.5 text-right">Entries</th>
                   </tr></thead>
                   <tbody>{rows.map((r, i) => (
                     <tr key={i} className="border-b border-line last:border-0">
                       <td className="px-5 py-2 font-semibold text-ink">{r.group}</td><td className="px-3 py-2">{formatDate(r.period_start)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{r.hours}</td><td className="px-5 py-2 text-right tabular-nums">{r.entries}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatDurationByHours(r.hours)}</td><td className="px-5 py-2 text-right tabular-nums">{r.entries}</td>
                     </tr>))}
                   </tbody>
                 </table>
@@ -198,7 +202,7 @@ function Exports() {
                 <Badge tone={e.status === "READY" ? "success" : e.status === "FAILED" ? "danger" : "info"}>{titleCase(e.status ?? "")}</Badge>
                 {e.status === "READY" && (
                   <Button variant="outline" size="sm"
-                          onClick={() => void downloadFile(`/api/v1/reports/exports/${e.id}/download/`, e.filename ?? "report").catch((err) => toast.error(errorMessage(err)))}>
+                    onClick={() => void downloadFile(`/api/v1/reports/exports/${e.id}/download/`, e.filename ?? "report").catch((err) => toast.error(errorMessage(err)))}>
                     <Download /> Download
                   </Button>
                 )}
@@ -317,8 +321,8 @@ function Schedules() {
       </QueryState>
       {editing && <ScheduleDialog schedule={editing} onClose={() => setEditing(null)} />}
       <ConfirmDialog open={Boolean(deleting)} onOpenChange={() => setDeleting(null)} title={`Delete ${deleting?.name}?`}
-                     confirmLabel="Delete" danger loading={remove.isPending}
-                     onConfirm={() => deleting && remove.mutate({ params: { path: { schedule_id: deleting.id } } })} />
+        confirmLabel="Delete" danger loading={remove.isPending}
+        onConfirm={() => deleting && remove.mutate({ params: { path: { schedule_id: deleting.id } } })} />
     </Card>
   );
 }
