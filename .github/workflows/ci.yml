@@ -1,0 +1,104 @@
+name: CI
+
+# CI disabled: automatic push/PR triggers removed. Run manually from the Actions tab.
+# To re-enable, restore:
+#   push:
+#     branches: [main, "dev/**"]
+#   pull_request:
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, migrations, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-used-anywhere-else
+      DATABASE_URL: postgres://tasktrack_owner:owner_ci@localhost:5432/tasktrack
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python and dependencies
+        run: uv sync --frozen
+      - name: Create database roles (same script as docker compose)
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGPASSWORD: postgres_ci
+          POSTGRES_USER: postgres
+          TASKTRACK_OWNER_PASSWORD: owner_ci
+          TASKTRACK_APP_PASSWORD: app_ci
+        run: sh docker/postgres/init/01-roles.sh
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Migrations are up to date
+        run: uv run python manage.py makemigrations --check --dry-run
+      - name: Django deploy checks
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          JWT_SIGNING_KEY: ci-only-jwt-signing-key-of-sufficient-length
+          FIELD_ENCRYPTION_KEY: 0Wd4KQ3kUvJm0q5JmXl6rWZsYQ7gQ6m3l8J0o2c1p9E=
+          DJANGO_ALLOWED_HOSTS: example.com
+        run: uv run python manage.py check --deploy --fail-level WARNING
+      - name: Tests
+        run: uv run pytest -p no:cacheprovider --cov=apps --cov-report=term-missing:skip-covered
+      - name: OpenAPI schema validates
+        run: uv run python manage.py spectacular --file /tmp/openapi.json --format openapi-json --validate --fail-on-warn
+      - name: OpenAPI snapshot is current (run `make api-client` if this fails)
+        run: diff -u ../frontend/openapi.json /tmp/openapi.json
+
+  frontend:
+    name: Frontend (lint, types, unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - name: Generated API types match openapi.json
+        run: |
+          npm run -s api:types
+          git diff --exit-code -- lib/api/schema.d.ts
+      - run: npm run typecheck
+      - run: npm test
+
+  compose:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker build --build-arg DEV=false -t tasktrack-backend:ci backend

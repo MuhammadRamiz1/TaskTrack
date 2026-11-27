@@ -1,0 +1,9 @@
+Hi {{ first_name }},
+
+{{ title }}
+{% if body %}
+{{ body }}
+{% endif %}
+Open TaskTrack: {{ link }}
+
+You can change which emails you receive in Settings > Notifications.

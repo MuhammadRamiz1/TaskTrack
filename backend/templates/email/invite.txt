@@ -1,0 +1,11 @@
+Hi {{ first_name }},
+
+{{ invited_by }} invited you to join {{ company_name }} on TaskTrack.
+
+Set your password to activate your account:
+{{ link }}
+
+This link can be used once and expires on {{ expires_at }}.
+If it has expired, ask HR for a new link.
+
+If you were not expecting this invitation, you can ignore this email.

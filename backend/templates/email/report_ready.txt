@@ -1,0 +1,7 @@
+Hi {{ first_name }},
+
+Your scheduled report "{{ title }}" is attached ({{ filename }}).
+
+Period: {{ period }}
+
+Manage scheduled reports in TaskTrack: {{ link }}

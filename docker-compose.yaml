@@ -1,80 +1,189 @@
+# TaskTrack local development stack.
+#   make up      build and start everything
+#   make reset   stop and delete all volumes (database, redis, media, s3)
+#
+# Inside the network, services reach each other by name (postgres:5432, redis:6379,
+# mailhog:1025, api:8000, s3:8333). Host ports are listed per service.
+#
+# File storage: USE_S3=false (default) stores attachments and exports on the local
+# "media" volume and serves them through permission-checked API endpoints.
+# USE_S3=true uses the S3 API; start the local S3 store with:
+#   USE_S3=true docker compose --profile s3 up -d
+
+x-backend: &backend
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+    args:
+      DEV: "true"
+  image: tasktrack-backend:dev
+  volumes:
+    - ./backend:/app
+    - media_data:/var/lib/tasktrack/media
+  env_file:
+    - path: .env
+      required: false
+  environment: &backend-env
+    DJANGO_SETTINGS_MODULE: config.settings.dev
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-only-insecure-secret-key-change-me}
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+    # Runtime role: not owner, NOBYPASSRLS, so RLS applies to every query.
+    DATABASE_URL: postgres://tasktrack_app:${TASKTRACK_APP_PASSWORD:-tasktrack_app_dev}@postgres:5432/tasktrack
+    # Owner role: used only by the migrate service and pytest.
+    DATABASE_OWNER_URL: postgres://tasktrack_owner:${TASKTRACK_OWNER_PASSWORD:-tasktrack_owner_dev}@postgres:5432/tasktrack
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: redis://redis:6379/1
+    USE_S3: ${USE_S3:-false}
+    MEDIA_ROOT: /var/lib/tasktrack/media
+    S3_ENDPOINT_URL: http://s3:8333
+    S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+    S3_BUCKET: ${S3_BUCKET:-tasktrack}
+    S3_ACCESS_KEY: ${S3_ACCESS_KEY:-tasktrack}
+    S3_SECRET_KEY: ${S3_SECRET_KEY:-tasktrack-s3-dev}
+    EMAIL_HOST: mailhog
+    EMAIL_PORT: "1025"
+    WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
+  depends_on: &backend-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 
 services:
-
-  # Next.js Frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: tasktrack-frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_INTERNAL_URL: http://backend:8000
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  # Django Backend
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: tasktrack-backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-    environment:
-      DB_NAME: tasktrack_db
-      DB_USER: tasktrack_user
-      DB_PASSWORD: tasktrack_password
-      DB_HOST: db
-      DB_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    restart: unless-stopped
-
-  # PostgreSQL Database
-  db:
-    image: postgres:17-alpine
+  postgres:
+    image: postgres:16-alpine
     container_name: tasktrack-postgres
     ports:
       - "4000:5432"
     environment:
-      POSTGRES_DB: tasktrack_db
-      POSTGRES_USER: tasktrack_user
-      POSTGRES_PASSWORD: tasktrack_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres_dev}
+      POSTGRES_DB: postgres
+      TASKTRACK_OWNER_PASSWORD: ${TASKTRACK_OWNER_PASSWORD:-tasktrack_owner_dev}
+      TASKTRACK_APP_PASSWORD: ${TASKTRACK_APP_PASSWORD:-tasktrack_app_dev}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres16_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tasktrack_user -d tasktrack_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktrack"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
     restart: unless-stopped
 
-  # Redis
   redis:
     image: redis:7-alpine
     container_name: tasktrack-redis
     ports:
       - "4001:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Optional S3-compatible store (SeaweedFS). Only started with --profile s3.
+  # MinIO no longer publishes public images; the app speaks plain S3 API, so any
+  # S3-compatible service works in production.
+  s3:
+    image: chrislusf/seaweedfs:4.54
+    container_name: tasktrack-s3
+    profiles: ["s3"]
+    entrypoint: ["/bin/sh", "/init/entrypoint.sh"]
+    ports:
+      - "9000:8333"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-tasktrack}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-tasktrack-s3-dev}
+      S3_BUCKET: ${S3_BUCKET:-tasktrack}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
+    volumes:
+      - s3_data:/data
+      - ./docker/s3:/init:ro
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: tasktrack-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    container_name: tasktrack-migrate
+    command: ["sh", "-c", "DATABASE_URL=$$DATABASE_OWNER_URL python manage.py migrate --noinput"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    container_name: tasktrack-api
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      <<: *backend-deps
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    container_name: tasktrack-worker
+    command: celery -A config worker --loglevel=INFO --concurrency=2
+    depends_on:
+      <<: *backend-deps
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  beat:
+    <<: *backend
+    container_name: tasktrack-beat
+    command: celery -A config beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      <<: *backend-deps
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tasktrack-web
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules
+    environment:
+      # Server-side rewrite target for /api/* (same-origin API for the browser).
+      API_INTERNAL_URL: http://api:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  postgres16_data:
   redis_data:
-  frontend_node_modules:
+  media_data:
+  s3_data:
+  web_node_modules:
