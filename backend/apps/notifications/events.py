@@ -13,10 +13,6 @@ EVENTS: dict[str, dict] = {
     "review.approved": {"label": "My task is approved", "in_app": True, "email": True},
     "review.changes_requested": {"label": "Changes are requested on my task", "in_app": True, "email": True},
     "time.timer_stopped": {"label": "My timer was stopped automatically", "in_app": True, "email": False},
-    "timesheet.submitted": {"label": "A timesheet is waiting for my approval", "in_app": True, "email": True},
-    "timesheet.approved": {"label": "My timesheet is approved", "in_app": True, "email": False},
-    "timesheet.rejected": {"label": "My timesheet is rejected", "in_app": True, "email": True},
-    "timesheet.reminder": {"label": "Reminder to submit last week's timesheet", "in_app": True, "email": True},
     "report.ready": {"label": "My report export is ready", "in_app": True, "email": False},
 }
 

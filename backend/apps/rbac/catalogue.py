@@ -85,8 +85,6 @@ PERMISSIONS: dict[str, tuple[str, str, list[Scope]]] = {
     "time.track": ("time", "Track own time", [O]),
     "time.view": ("time", "View time records", ALL_TENANT),
     "time.edit_others": ("time", "Correct other people's time entries", [C, T, PR]),
-    "timesheet.submit": ("time", "Submit own timesheets", [O]),
-    "timesheet.approve": ("time", "Approve and reject timesheets", [C, T, PR]),
     # Dashboards and reports
     "dashboard.manager.view": ("reports", "View the manager dashboard", [C, T, PR]),
     "dashboard.member.view": ("reports", "View the personal dashboard", [O]),
@@ -105,7 +103,7 @@ ROLES: dict[RoleKey, dict] = {
 }
 
 _PLATFORM_CODES = [code for code, (_, _, scopes) in PERMISSIONS.items() if scopes == [P]]
-_COMPANY_ADMIN_OWN = {"time.track", "timesheet.submit", "dashboard.member.view", "task.acknowledge"}
+_COMPANY_ADMIN_OWN = {"time.track", "dashboard.member.view", "task.acknowledge"}
 
 GRANTS: dict[RoleKey, dict[str, Scope]] = {
     RoleKey.SUPER_ADMIN: {code: P for code in _PLATFORM_CODES},
@@ -164,8 +162,6 @@ GRANTS: dict[RoleKey, dict[str, Scope]] = {
         "time.track": O,
         "time.view": PR,
         "time.edit_others": PR,
-        "timesheet.submit": O,
-        "timesheet.approve": T,
         "dashboard.manager.view": PR,
         "dashboard.member.view": O,
         "report.view": PR,
@@ -194,7 +190,6 @@ GRANTS: dict[RoleKey, dict[str, Scope]] = {
         "review.view": T,
         "time.track": O,
         "time.view": T,
-        "timesheet.submit": O,
         "dashboard.manager.view": T,
         "dashboard.member.view": O,
         "report.view": T,
@@ -217,7 +212,6 @@ GRANTS: dict[RoleKey, dict[str, Scope]] = {
         "review.view": O,
         "time.track": O,
         "time.view": O,
-        "timesheet.submit": O,
         "dashboard.member.view": O,
         "report.view": O,
         "report.export": O,

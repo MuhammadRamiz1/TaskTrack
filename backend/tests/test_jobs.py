@@ -11,9 +11,6 @@ from apps.notifications.models import Notification
 from apps.tasks.models import Status, Task, TaskActivity
 from apps.tasks.tasks import notify_long_blocked, purge_orphan_files, send_due_reminders
 from apps.tasks.workflow import transition_task
-from apps.timetracking.models import Timesheet
-from apps.timetracking.services import create_manual
-from apps.timetracking.tasks import remind_timesheet_submission
 from tests import factories as f
 
 
@@ -46,20 +43,6 @@ def test_long_blocked_alert(world):
     assert notify_long_blocked() >= 1
     assert Notification.objects.filter(recipient=world.manager, event_type="task.long_blocked").exists()
     assert notify_long_blocked() == 0
-
-
-def test_timesheet_reminder_on_week_start(world, company_a):
-    task = f.make_task(world.project, world.manager, assignees=[world.member])
-    monday = date(2026, 11, 23)
-    with freeze_time("2026-11-18 12:00:00"):
-        began = timezone.now() - timedelta(hours=3)
-        transition_task(actor=world.member, task_id=task.pk, to_status=Status.IN_PROGRESS)
-        create_manual(actor=world.member, task_id=task.pk, started_at=began, ended_at=began + timedelta(hours=1))
-    assert Timesheet.objects.get(user=world.member).period_start == date(2026, 11, 16)
-    with freeze_time(f"{monday} 06:00:00"):
-        assert remind_timesheet_submission() == 1
-    with freeze_time(f"{monday + timedelta(days=1)} 06:00:00"):
-        assert remind_timesheet_submission() == 0  # not the first day of the week
 
 
 def test_orphan_files_are_removed(world, settings, tmp_path):

@@ -1,6 +1,6 @@
 """Task review workflow: submit, approve, request changes.
 
-Separate from timesheet approval by design (different app, tables and endpoints). Status
+Separate from time tracking by design (different app, tables and endpoints). Status
 changes go through tasks.workflow.transition_task with the SUBMIT / APPROVE /
 REQUEST_CHANGES triggers, which the generic transition endpoint cannot use.
 """

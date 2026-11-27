@@ -3,7 +3,7 @@
 from apps.rbac import policy
 
 from .models import Status, StatusTransitionRule, Task, Trigger
-from .workflow import _actor_allowed
+from .workflow import actor_allowed, open_blockers
 
 _ACTIONS = {
     Trigger.MANUAL: "transition",
@@ -22,19 +22,43 @@ def _open_review(task: Task):
     return task.reviews.filter(decision="PENDING").first()
 
 
+def _open_required_items(task: Task) -> int:
+    """Open required checklist items, from the board's annotation when present."""
+    if hasattr(task, "open_required_items"):
+        return task.open_required_items
+    from .services.details import required_items_open
+
+    return required_items_open(task)
+
+
+def _has_open_blockers(task: Task) -> bool:
+    """Open blockers, from the board's annotation when present (only if the company enforces dependencies)."""
+    if not task.company.enforce_dependencies:
+        return False
+    if hasattr(task, "open_blocker_count"):
+        return task.open_blocker_count > 0
+    return bool(open_blockers(task))
+
+
 def _permitted(actor, task: Task, rule: StatusTransitionRule) -> bool:
     from apps.reviews.services import can_decide
 
+    if rule.to_status == Status.IN_PROGRESS and _has_open_blockers(task):
+        return False  # the transition would be refused with dependency_blocked
     if rule.trigger == Trigger.MANUAL:
         if task.locked_at and task.status != Status.COMPLETED:
             return False
-        return _actor_allowed(actor, rule, task)
-    if not policy.role_keys(actor) & set(rule.allowed_roles):
+        return actor_allowed(actor, rule, task)
+    if not actor_allowed(actor, rule, task):
         return False
     if rule.trigger == Trigger.ASSIGN:
         return policy.can(actor, "task.assign", task)
     if rule.trigger == Trigger.SUBMIT:
-        return policy.can(actor, "review.submit", task) and any(a.user_id == actor.pk for a in task.assignees.all())
+        return (
+            policy.can(actor, "review.submit", task)
+            and any(a.user_id == actor.pk for a in task.assignees.all())
+            and _open_required_items(task) == 0
+        )
     review = _open_review(task)  # APPROVE / REQUEST_CHANGES
     return review is not None and can_decide(actor, task, review)
 

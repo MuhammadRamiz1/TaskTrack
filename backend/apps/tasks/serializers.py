@@ -330,9 +330,21 @@ class AllowedMove(serializers.Serializer):
 
 class BoardCard(TaskSummary):
     allowed_moves = serializers.SerializerMethodField()
+    # Annotated by TaskBoardView.
+    checklist_total = serializers.IntegerField(read_only=True)
+    checklist_done = serializers.IntegerField(read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
+    attachment_count = serializers.IntegerField(read_only=True)
 
     class Meta(TaskSummary.Meta):
-        fields = [*TaskSummary.Meta.fields, "allowed_moves"]
+        fields = [
+            *TaskSummary.Meta.fields,
+            "allowed_moves",
+            "checklist_total",
+            "checklist_done",
+            "comment_count",
+            "attachment_count",
+        ]
 
     @extend_schema_field(AllowedMove(many=True))
     def get_allowed_moves(self, task) -> list[dict]:

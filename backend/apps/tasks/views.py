@@ -2,7 +2,8 @@ import uuid
 from datetime import date
 
 import django_filters
-from django.db.models import Prefetch, Q
+from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import FileResponse
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -33,7 +34,7 @@ from .models import (
 )
 from .services import assignment, attachments, details, rules
 from .services import tasks as task_services
-from .workflow import allowed_targets, transition_task
+from .workflow import DONE_STATUSES, allowed_targets, transition_task
 
 TASK_HINT = Task._base_manager.none()
 
@@ -212,6 +213,13 @@ class TaskByKeyView(TenantAPIView):
         return Response(_detail(request, task.pk))
 
 
+def _count_per_task(qs, task_field: str):
+    """Correlated COUNT per task: one subquery each, so the board stays a single query without join fan-out."""
+    counted = qs.filter(**{task_field: OuterRef("pk")}).order_by().values(task_field)
+    counted = counted.annotate(n=Count("pk")).values("n")
+    return Coalesce(Subquery(counted, output_field=IntegerField()), 0)
+
+
 class TaskBoardView(TenantAPIView):
     queryset = TASK_HINT
     permission_map = {"GET": "task.view"}
@@ -236,6 +244,24 @@ class TaskBoardView(TenantAPIView):
             selectors.visible_tasks(request.user)
             .filter(project=project)
             .select_related("company")
+            .annotate(
+                open_required_items=Count(
+                    "checklists__items",
+                    filter=Q(checklists__items__is_required=True, checklists__items__is_done=False),
+                    distinct=True,
+                ),
+                open_blocker_count=Count(
+                    "dependencies",
+                    filter=~Q(dependencies__blocked_by__status__in=DONE_STATUSES),
+                    distinct=True,
+                ),
+                checklist_total=_count_per_task(ChecklistItem.objects, "checklist__task"),
+                checklist_done=_count_per_task(ChecklistItem.objects.filter(is_done=True), "checklist__task"),
+                comment_count=_count_per_task(TaskComment.objects.filter(deleted_at__isnull=True), "task"),
+                attachment_count=_count_per_task(
+                    TaskAttachment.objects.filter(status=TaskAttachment.State.ACTIVE), "task"
+                ),
+            )
             .prefetch_related(
                 Prefetch(
                     "reviews",

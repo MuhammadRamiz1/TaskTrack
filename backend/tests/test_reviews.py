@@ -1,4 +1,4 @@
-"""Task review workflow (separate from timesheet approval)."""
+"""Task review workflow."""
 
 import pytest
 

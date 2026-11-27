@@ -121,6 +121,30 @@ class TestCrud:
         assert client.get(f"{TASKS}{task.pk}/").status_code == 404
         assert client.post(f"{TASKS}{task.pk}/restore/").json()["id"] == str(task.pk)
 
+    def test_only_the_owner_deletes_and_restores(self, world, task):
+        admin = f.client_for(world.admin)  # holds task.delete company-wide but did not create the task
+        refused = admin.delete(f"{TASKS}{task.pk}/")
+        assert refused.status_code == 403 and refused.json()["error"]["code"] == "not_task_owner"
+        assert f.client_for(world.manager).delete(f"{TASKS}{task.pk}/").status_code == 204
+        refused = admin.post(f"{TASKS}{task.pk}/restore/")
+        assert refused.status_code == 403 and refused.json()["error"]["code"] == "not_task_owner"
+
+    @pytest.mark.parametrize("status", [Status.BACKLOG, Status.ASSIGNED])
+    def test_owner_deletes_pending_tasks(self, world, status):
+        task = f.make_task(world.project, world.manager)
+        Task.objects.filter(pk=task.pk).update(status=status)
+        assert f.client_for(world.manager).delete(f"{TASKS}{task.pk}/").status_code == 204
+
+    @pytest.mark.parametrize(
+        "status", [Status.IN_PROGRESS, Status.IN_REVIEW, Status.ON_HOLD, Status.BLOCKED, Status.COMPLETED]
+    )
+    def test_owner_cannot_delete_started_or_finished_tasks(self, world, status):
+        task = f.make_task(world.project, world.manager)
+        Task.objects.filter(pk=task.pk).update(status=status)
+        response = f.client_for(world.manager).delete(f"{TASKS}{task.pk}/")
+        assert response.status_code == 409 and response.json()["error"]["code"] == "task_not_pending"
+        assert Task.objects.filter(pk=task.pk).exists()
+
     def test_filters_search_and_ordering(self, world, task):
         f.make_task(world.project, world.manager, title="Write docs", priority="URGENT")
         client = f.client_for(world.manager)

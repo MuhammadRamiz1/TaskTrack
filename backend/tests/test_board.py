@@ -129,3 +129,78 @@ def test_board_query_count_is_constant(world, who):
     small = count()
     _populate(world, 4)
     assert count() == small
+
+
+def _depend(world, task):
+    from apps.tasks.models import TaskDependency
+
+    blocker = f.make_task(world.project, world.manager)
+    TaskDependency.objects.create(company_id=task.company_id, task=task, blocked_by=blocker)
+
+
+def test_no_review_move_with_open_required_checklist_item(world):
+    from apps.tasks.models import ChecklistItem, TaskChecklist
+
+    task = f.make_task(world.project, world.manager, assignees=[world.member])
+    to_progress(world, task)
+    checklist = TaskChecklist.objects.create(company_id=task.company_id, task=task, title="DoD")
+    item = ChecklistItem.objects.create(company_id=task.company_id, checklist=checklist, text="Tests", is_required=True)
+    assert "IN_REVIEW" not in moves(f.client_for(world.member), world, task)
+    item.is_done = True
+    item.save()
+    assert moves(f.client_for(world.member), world, task)["IN_REVIEW"] == "submit"
+
+
+def test_optional_checklist_item_does_not_hide_review_move(world):
+    from apps.tasks.models import ChecklistItem, TaskChecklist
+
+    task = f.make_task(world.project, world.manager, assignees=[world.member])
+    to_progress(world, task)
+    checklist = TaskChecklist.objects.create(company_id=task.company_id, task=task, title="DoD")
+    ChecklistItem.objects.create(company_id=task.company_id, checklist=checklist, text="Nice")
+    assert moves(f.client_for(world.member), world, task)["IN_REVIEW"] == "submit"
+
+
+def test_no_progress_move_with_open_blockers_when_enforced(world):
+    task = f.make_task(world.project, world.manager, assignees=[world.member])
+    _depend(world, task)
+    assert "IN_PROGRESS" not in moves(f.client_for(world.member), world, task)
+
+
+def test_progress_move_offered_with_blockers_when_not_enforced(world, company_a):
+    company_a.enforce_dependencies = False
+    company_a.save()
+    task = f.make_task(world.project, world.manager, assignees=[world.member])
+    _depend(world, task)
+    assert moves(f.client_for(world.member), world, task)["IN_PROGRESS"] == "transition"
+
+
+def test_card_carries_checklist_comment_and_attachment_counts(world):
+    from apps.tasks.models import ChecklistItem, TaskAttachment, TaskChecklist, TaskComment
+
+    task = f.make_task(world.project, world.manager)
+    cid = task.company_id
+    checklist = TaskChecklist.objects.create(company_id=cid, task=task, title="Steps")
+    for i, done in enumerate([True, True, False]):
+        ChecklistItem.objects.create(company_id=cid, checklist=checklist, text=f"step {i}", is_done=done)
+    TaskComment.objects.create(company_id=cid, task=task, author=world.manager, body="hi")
+    TaskComment.objects.create(
+        company_id=cid, task=task, author=world.manager, body="gone", deleted_at="2026-01-01T00:00Z"
+    )
+    for state in (TaskAttachment.State.ACTIVE, TaskAttachment.State.DELETED):
+        TaskAttachment.objects.create(
+            company_id=cid,
+            task=task,
+            storage_key="k",
+            filename="a.txt",
+            content_type="text/plain",
+            size_bytes=1,
+            sha256="0" * 64,
+            status=state,
+        )
+    other = f.make_task(world.project, world.manager)
+
+    cards = {c["id"]: c for col in board(f.client_for(world.manager), world)["columns"] for c in col["tasks"]}
+    counts = lambda c: (c["checklist_done"], c["checklist_total"], c["comment_count"], c["attachment_count"])  # noqa: E731
+    assert counts(cards[str(task.pk)]) == (2, 3, 1, 1)
+    assert counts(cards[str(other.pk)]) == (0, 0, 0, 0)

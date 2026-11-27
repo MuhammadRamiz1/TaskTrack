@@ -1,16 +1,19 @@
-"""Time tracking: server-side timer, manual entries, weekly timesheets and their approval.
+"""Time tracking: server-side timer and manual entries.
 
 Concurrency: every timer change first locks the user's row (SELECT ... FOR UPDATE), so
 two devices starting a timer at the same moment serialise; the partial unique index
 ``timeentry_one_running_per_user`` is the database backstop. Entries never overlap
-(exclusion constraint). Timesheet approval is independent of task review.
+(exclusion constraint).
+
+Time belongs to a task and follows the task's status: once the task is in review, completed
+or cancelled its entries are locked, and they
+open again when the task goes back to work (changes requested, reopened).
 """
 
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -23,10 +26,12 @@ from apps.tasks.services import activity
 from apps.tasks.services.tasks import get_task
 from apps.tasks.workflow import transition_task
 
-from .models import TimeEntry, Timesheet, TimesheetApproval
+from .models import TimeEntry
 
 MAX_ENTRY = timedelta(hours=24)
 STARTABLE_VIA_TIMER = {Status.ASSIGNED, Status.REOPENED}
+#: Task statuses whose time entries can no longer be added, changed or deleted.
+LOCKED_TASK_STATUSES = frozenset({Status.IN_REVIEW, Status.COMPLETED, Status.CANCELLED})
 
 
 # --- helpers ----------------------------------------------------------------------------
@@ -36,24 +41,17 @@ def local_date(user: User, moment: datetime) -> date:
     return moment.astimezone(ZoneInfo(user.timezone or "UTC")).date()
 
 
-def week_of(company, day: date) -> tuple[date, date]:
-    start = day - timedelta(days=(day.weekday() - company.week_start) % 7)
-    return start, start + timedelta(days=6)
+def is_locked(entry: TimeEntry) -> bool:
+    """Running entries and entries on tasks in review, completed or cancelled cannot change."""
+    return entry.ended_at is None or entry.task.status in LOCKED_TASK_STATUSES
 
 
-def timesheet_for(user: User, day: date) -> Timesheet:
-    start, end = week_of(user.company, day)
-    sheet, _ = Timesheet.objects.get_or_create(
-        user=user, period_start=start, defaults={"company_id": user.company_id, "period_end": end}
-    )
-    return sheet
-
-
-def _ensure_sheet_open(sheet: Timesheet) -> None:
-    if sheet.is_locked:
+def _ensure_task_open(task: Task) -> None:
+    if task.status in LOCKED_TASK_STATUSES:
         raise Conflict(
-            f"The timesheet for the week of {sheet.period_start} is {sheet.status.lower()} and cannot change.",
-            code="timesheet_locked",
+            f"{task.key} is {task.get_status_display().lower()}; its time can no longer change.",
+            code="task_locked",
+            details={"status": task.status},
         )
 
 
@@ -78,17 +76,9 @@ def _close(entry: TimeEntry, at: datetime, reason: str) -> TimeEntry:
     entry.status = TimeEntry.Status.DRAFT
     entry.version += 1
     entry.save(update_fields=["ended_at", "duration_seconds", "status", "version", "updated_at"])
-    _recalculate(entry.timesheet)
     task = entry.task
     activity.log(task, entry.user, "time_logged", {"minutes": entry.duration_seconds // 60, "reason": reason})
     return entry
-
-
-def _recalculate(sheet: Timesheet | None) -> None:
-    if sheet is None:
-        return
-    total = sheet.entries.filter(ended_at__isnull=False).aggregate(s=Sum("duration_seconds"))["s"] or 0
-    Timesheet.objects.filter(pk=sheet.pk).update(total_seconds=total)
 
 
 # --- timer ------------------------------------------------------------------------------
@@ -120,15 +110,12 @@ def start_timer(*, actor: User, task_id) -> TimeEntry:
                 details={"status": task.status},
             )
         now = timezone.now()
-        sheet = timesheet_for(actor, local_date(actor, now))
-        _ensure_sheet_open(sheet)
         try:
             with transaction.atomic():
                 entry = TimeEntry.objects.create(
                     company_id=actor.company_id,
                     user=actor,
                     task=task,
-                    timesheet=sheet,
                     started_at=now,
                     work_date=local_date(actor, now),
                     source=TimeEntry.Source.TIMER,
@@ -261,18 +248,14 @@ def create_manual(*, actor: User, task_id, started_at: datetime, ended_at: datet
     with transaction.atomic():
         task = get_task(actor, task_id)
         _require_assignee(actor, task)
-        if task.is_read_only:
-            raise Conflict("The task is completed or cancelled.", code="task_locked")
+        _ensure_task_open(task)
         _validate_range(actor, started_at, ended_at)
         day = local_date(actor, started_at)
-        sheet = timesheet_for(actor, day)
-        _ensure_sheet_open(sheet)
         entry = _save_entry(
             TimeEntry(
                 company_id=actor.company_id,
                 user=actor,
                 task=task,
-                timesheet=sheet,
                 started_at=started_at,
                 ended_at=ended_at,
                 duration_seconds=int((ended_at - started_at).total_seconds()),
@@ -282,7 +265,6 @@ def create_manual(*, actor: User, task_id, started_at: datetime, ended_at: datet
                 note=note,
             )
         )
-        _recalculate(sheet)
         activity.log(task, actor, "time_logged", {"minutes": entry.duration_seconds // 60, "reason": "manual"})
         record(
             actor=actor,
@@ -294,7 +276,7 @@ def create_manual(*, actor: User, task_id, started_at: datetime, ended_at: datet
 
 
 def get_entry(actor: User, entry_id) -> TimeEntry:
-    entry = TimeEntry.objects.filter(pk=entry_id).select_related("task__project", "user", "timesheet").first()
+    entry = TimeEntry.objects.filter(pk=entry_id).select_related("task__project", "user").first()
     if entry is None or not policy.can(actor, "time.view", entry):
         raise NotFound()
     return entry
@@ -305,14 +287,15 @@ def _require_editable(actor: User, entry: TimeEntry) -> None:
         policy.require(actor, "time.edit_others", entry, view_code="time.view")
     else:
         policy.require(actor, "time.track")
-    if entry.status != TimeEntry.Status.DRAFT:
-        raise Conflict("Only stopped entries in an open timesheet can change.", code="timesheet_locked")
+    if entry.ended_at is None:
+        raise Conflict("Stop the timer before changing this entry.", code="timer_running")
+    _ensure_task_open(entry.task)
 
 
 def update_entry(*, actor: User, entry_id, data: dict, expected_version: int) -> TimeEntry:
     with transaction.atomic():
         entry = get_entry(actor, entry_id)
-        entry = TimeEntry.objects.select_for_update().get(pk=entry.pk)
+        entry = TimeEntry.objects.select_for_update().select_related("task", "user").get(pk=entry.pk)
         _require_editable(actor, entry)
         if expected_version != entry.version:
             raise Conflict(
@@ -324,19 +307,12 @@ def update_entry(*, actor: User, entry_id, data: dict, expected_version: int) ->
         started = data.get("started_at", entry.started_at)
         ended = data.get("ended_at", entry.ended_at)
         _validate_range(entry.user, started, ended)
-        new_sheet = timesheet_for(entry.user, local_date(entry.user, started))
-        _ensure_sheet_open(new_sheet)
-        old_sheet = entry.timesheet
         entry.started_at, entry.ended_at = started, ended
         entry.duration_seconds = int((ended - started).total_seconds())
         entry.work_date = local_date(entry.user, started)
-        entry.timesheet = new_sheet
         entry.note = data.get("note", entry.note)
         entry.version += 1
         _save_entry(entry)
-        _recalculate(new_sheet)
-        if old_sheet and old_sheet.pk != new_sheet.pk:
-            _recalculate(old_sheet)
         record(
             actor=actor,
             action="time.entry_updated",
@@ -351,7 +327,6 @@ def delete_entry(*, actor: User, entry_id) -> None:
     with transaction.atomic():
         entry = get_entry(actor, entry_id)
         _require_editable(actor, entry)
-        sheet = entry.timesheet
         record(
             actor=actor,
             action="time.entry_deleted",
@@ -359,120 +334,3 @@ def delete_entry(*, actor: User, entry_id) -> None:
             old_value={"task_id": entry.task_id, "started_at": entry.started_at, "ended_at": entry.ended_at},
         )
         entry.delete()
-        _recalculate(sheet)
-
-
-# --- timesheets ---------------------------------------------------------------------------------
-
-
-def get_timesheet(actor: User, sheet_id) -> Timesheet:
-    sheet = Timesheet.objects.filter(pk=sheet_id).select_related("user").first()
-    if sheet is None or not policy.can(actor, "time.view", sheet):
-        raise NotFound()
-    return sheet
-
-
-def approvers_for(sheet: Timesheet) -> list[User]:
-    from apps.rbac.models import UserRole
-
-    candidates = {sheet.user.manager} if sheet.user.manager_id else set()
-    holder_ids = UserRole.objects.filter(role__grants__permission__code="timesheet.approve").values_list(
-        "user_id", flat=True
-    )
-    for user in User.objects.filter(pk__in=holder_ids, status=User.Status.ACTIVE).exclude(pk=sheet.user_id):
-        if policy.can(user, "timesheet.approve", sheet):
-            candidates.add(user)
-    return [u for u in candidates if u is not None and u.pk != sheet.user_id]
-
-
-def submit_timesheet(*, actor: User, sheet_id) -> Timesheet:
-    with transaction.atomic():
-        sheet = get_timesheet(actor, sheet_id)
-        sheet = Timesheet.objects.select_for_update().select_related("user").get(pk=sheet.pk)
-        if sheet.user_id != actor.pk:
-            raise Forbidden("You can only submit your own timesheet.")
-        policy.require(actor, "timesheet.submit")
-        if sheet.status not in (Timesheet.Status.OPEN, Timesheet.Status.REJECTED):
-            raise Conflict("This timesheet was already submitted.", code="timesheet_locked")
-        if sheet.entries.filter(ended_at__isnull=True).exists():
-            raise Conflict("Stop the running timer before submitting.", code="timer_running")
-        if not sheet.entries.exists():
-            raise InvalidInput("There is no time to submit for this week.", code="timesheet_empty")
-        sheet.entries.update(status=TimeEntry.Status.SUBMITTED)
-        _recalculate(sheet)
-        sheet.refresh_from_db()
-        old = sheet.status
-        sheet.status = Timesheet.Status.SUBMITTED
-        sheet.submitted_at = timezone.now()
-        sheet.save(update_fields=["status", "submitted_at", "updated_at"])
-        record(
-            actor=actor,
-            action="timesheet.submitted",
-            entity=sheet,
-            old_value={"status": old},
-            new_value={"status": sheet.status, "total_seconds": sheet.total_seconds},
-        )
-        notify(
-            recipients=approvers_for(sheet),
-            actor=actor,
-            event_type="timesheet.submitted",
-            title=f"{actor.full_name} submitted the timesheet for {sheet.period_start}",
-            entity=sheet,
-        )
-        return sheet
-
-
-def _decide(actor: User, sheet_id, *, approve: bool, comment: str) -> Timesheet:
-    comment = (comment or "").strip()
-    with transaction.atomic():
-        sheet = get_timesheet(actor, sheet_id)
-        sheet = Timesheet.objects.select_for_update().select_related("user").get(pk=sheet.pk)
-        policy.require(actor, "timesheet.approve", sheet, view_code="time.view")
-        if sheet.user_id == actor.pk:
-            raise Forbidden("You cannot approve your own timesheet.", code="self_approval")
-        if sheet.status != Timesheet.Status.SUBMITTED:
-            raise Conflict("Only submitted timesheets can be approved or rejected.", code="invalid_timesheet_status")
-        if not approve and not comment:
-            raise InvalidInput(
-                "Explain what needs fixing.", code="comment_required", details={"comment": ["This field is required."]}
-            )
-        sheet.status = Timesheet.Status.APPROVED if approve else Timesheet.Status.REJECTED
-        sheet.decided_at = timezone.now()
-        sheet.save(update_fields=["status", "decided_at", "updated_at"])
-        sheet.entries.update(status=TimeEntry.Status.APPROVED if approve else TimeEntry.Status.DRAFT)
-        decision = TimesheetApproval.objects.create(
-            company_id=sheet.company_id,
-            timesheet=sheet,
-            approver=actor,
-            decision=TimesheetApproval.Decision.APPROVED if approve else TimesheetApproval.Decision.REJECTED,
-            comment=comment,
-        )
-        record(
-            actor=actor,
-            action="timesheet.approved" if approve else "timesheet.rejected",
-            entity=sheet,
-            old_value={"status": "SUBMITTED"},
-            new_value={"status": sheet.status, "comment": comment, "approval_id": decision.pk},
-        )
-        notify(
-            recipients=[sheet.user],
-            actor=actor,
-            event_type="timesheet.approved" if approve else "timesheet.rejected",
-            title=f"Your timesheet for {sheet.period_start} was {'approved' if approve else 'rejected'}",
-            body=comment,
-            entity=sheet,
-        )
-        return sheet
-
-
-def approve_timesheet(*, actor: User, sheet_id, comment: str = "") -> Timesheet:
-    return _decide(actor, sheet_id, approve=True, comment=comment)
-
-
-def reject_timesheet(*, actor: User, sheet_id, comment: str) -> Timesheet:
-    return _decide(actor, sheet_id, approve=False, comment=comment)
-
-
-def approval_queue(actor: User):
-    qs = Timesheet.objects.filter(status=Timesheet.Status.SUBMITTED).exclude(user=actor).select_related("user")
-    return policy.scope_queryset(actor, "timesheet.approve", qs).order_by("period_start")
