@@ -51,7 +51,6 @@ export default function NotificationsPage() {
                         onClick={() => {
                           if (!n.is_read) markOne.mutate({ params: { path: { notification_id: n.id } } });
                           if (n.entity_type === "task" && n.entity_id) router.push(`/tasks/${n.entity_id}`);
-                          else if (n.entity_type === "timesheet" && n.entity_id) router.push(`/timesheets/${n.entity_id}`);
                           else if (n.entity_type === "reportexport") router.push("/reports");
                         }}>
                   <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", n.is_read ? "bg-transparent" : "bg-primary-600")} aria-hidden />

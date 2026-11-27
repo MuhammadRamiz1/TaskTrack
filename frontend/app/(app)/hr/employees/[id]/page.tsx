@@ -228,7 +228,7 @@ export default function EmployeeDetailPage() {
               </Field>
               {can("employee.assign_team") && (
                 <div className="sm:col-span-2">
-                  <p className="mb-1.5 text-sm font-semibold text-ink">Manager (approves timesheets)</p>
+                  <p className="mb-1.5 text-sm font-semibold text-ink">Manager</p>
                   <PeoplePicker single label="Manager" value={manager} onChange={setManager} exclude={[e.id]} />
                 </div>
               )}

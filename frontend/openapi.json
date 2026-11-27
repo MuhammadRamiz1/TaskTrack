@@ -28,6 +28,24 @@
                     },
                     {
                         "in": "query",
+                        "name": "category",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "organization",
+                                "people",
+                                "reports",
+                                "roles",
+                                "security",
+                                "settings",
+                                "tasks",
+                                "time"
+                            ]
+                        },
+                        "description": "Kind of activity\n\n* `tasks` - Tasks\n* `organization` - Organization\n* `people` - People\n* `security` - Security\n* `roles` - Roles\n* `time` - Time\n* `reports` - Reports\n* `settings` - Settings"
+                    },
+                    {
+                        "in": "query",
                         "name": "date_from",
                         "schema": {
                             "type": "string",
@@ -3864,6 +3882,24 @@
                             "type": "string",
                             "format": "uuid"
                         }
+                    },
+                    {
+                        "in": "query",
+                        "name": "category",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "organization",
+                                "people",
+                                "reports",
+                                "roles",
+                                "security",
+                                "settings",
+                                "tasks",
+                                "time"
+                            ]
+                        },
+                        "description": "Kind of activity\n\n* `tasks` - Tasks\n* `organization` - Organization\n* `people` - People\n* `security` - Security\n* `roles` - Roles\n* `time` - Time\n* `reports` - Reports\n* `settings` - Settings"
                     },
                     {
                         "in": "query",
@@ -7797,55 +7833,6 @@
                 }
             }
         },
-        "/api/v1/time/approvals/queue/": {
-            "get": {
-                "operationId": "time_approvals_queue_list",
-                "summary": "Timesheets waiting for me",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "required": false,
-                        "in": "query",
-                        "description": "A page number within the paginated result set.",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "name": "page_size",
-                        "required": false,
-                        "in": "query",
-                        "description": "Number of results to return per page.",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/PaginatedTimesheetOutputList"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
         "/api/v1/time/entries/": {
             "get": {
                 "operationId": "time_entries_list",
@@ -8328,376 +8315,6 @@
                     }
                 }
             }
-        },
-        "/api/v1/time/timesheets/": {
-            "get": {
-                "operationId": "time_timesheets_list",
-                "summary": "Timesheets you can see",
-                "parameters": [
-                    {
-                        "name": "ordering",
-                        "required": false,
-                        "in": "query",
-                        "description": "Which field to use when ordering the results.",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "page",
-                        "required": false,
-                        "in": "query",
-                        "description": "A page number within the paginated result set.",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "name": "page_size",
-                        "required": false,
-                        "in": "query",
-                        "description": "Number of results to return per page.",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "in": "query",
-                        "name": "period_from",
-                        "schema": {
-                            "type": "string",
-                            "format": "date"
-                        }
-                    },
-                    {
-                        "in": "query",
-                        "name": "period_to",
-                        "schema": {
-                            "type": "string",
-                            "format": "date"
-                        }
-                    },
-                    {
-                        "name": "search",
-                        "required": false,
-                        "in": "query",
-                        "description": "A search term.",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "in": "query",
-                        "name": "status",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "enum": [
-                                    "APPROVED",
-                                    "OPEN",
-                                    "REJECTED",
-                                    "SUBMITTED"
-                                ]
-                            }
-                        },
-                        "description": "* `OPEN` - Open\n* `SUBMITTED` - Submitted\n* `APPROVED` - Approved\n* `REJECTED` - Rejected",
-                        "explode": true,
-                        "style": "form"
-                    },
-                    {
-                        "in": "query",
-                        "name": "user",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        }
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/PaginatedTimesheetOutputList"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/{timesheet_id}/": {
-            "get": {
-                "operationId": "time_timesheets_retrieve",
-                "summary": "Timesheet with entries and decisions",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "timesheet_id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TimesheetDetail"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/{timesheet_id}/approvals/": {
-            "get": {
-                "operationId": "time_timesheets_approvals_list",
-                "summary": "Approval history",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "timesheet_id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/ApprovalOutput"
-                                    }
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/{timesheet_id}/approve/": {
-            "post": {
-                "operationId": "time_timesheets_approve_create",
-                "summary": "Approve a timesheet",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "timesheet_id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimesheetDecisionInputRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimesheetDecisionInputRequest"
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TimesheetDetail"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/{timesheet_id}/reject/": {
-            "post": {
-                "operationId": "time_timesheets_reject_create",
-                "summary": "Reject a timesheet (comment required); entries become editable again",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "timesheet_id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimesheetDecisionInputRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimesheetDecisionInputRequest"
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TimesheetDetail"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/{timesheet_id}/submit/": {
-            "post": {
-                "operationId": "time_timesheets_submit_create",
-                "summary": "Submit my week for approval",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "timesheet_id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TimesheetDetail"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/time/timesheets/current/": {
-            "get": {
-                "operationId": "time_timesheets_current_retrieve",
-                "summary": "My timesheet for this week",
-                "tags": [
-                    "time"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TimesheetDetail"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
         }
     },
     "components": {
@@ -8794,36 +8411,6 @@
                 "required": [
                     "requires_comment",
                     "to_status"
-                ]
-            },
-            "ApprovalOutput": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "readOnly": true
-                    },
-                    "approver": {
-                        "$ref": "#/components/schemas/UserBrief"
-                    },
-                    "decision": {
-                        "$ref": "#/components/schemas/TimesheetDecisionEnum"
-                    },
-                    "comment": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true
-                    }
-                },
-                "required": [
-                    "approver",
-                    "created_at",
-                    "decision",
-                    "id"
                 ]
             },
             "AssignInputRequest": {
@@ -8927,6 +8514,25 @@
                     "uploaded_by"
                 ]
             },
+            "AuditChange": {
+                "type": "object",
+                "properties": {
+                    "field": {
+                        "type": "string"
+                    },
+                    "before": {
+                        "type": "string"
+                    },
+                    "after": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "after",
+                    "before",
+                    "field"
+                ]
+            },
             "AuditLogOutput": {
                 "type": "object",
                 "properties": {
@@ -8963,6 +8569,19 @@
                         "type": "string",
                         "maxLength": 80
                     },
+                    "summary": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "What happened, as a plain-English sentence."
+                    },
+                    "changes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AuditChange"
+                        },
+                        "readOnly": true,
+                        "description": "Changed fields in words (no codes or ids)."
+                    },
                     "entity_type": {
                         "type": "string",
                         "maxLength": 60
@@ -8992,8 +8611,10 @@
                 },
                 "required": [
                     "action",
+                    "changes",
                     "created_at",
-                    "id"
+                    "id",
+                    "summary"
                 ]
             },
             "BoardCard": {
@@ -9093,11 +8714,31 @@
                             "$ref": "#/components/schemas/AllowedMove"
                         },
                         "readOnly": true
+                    },
+                    "checklist_total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "checklist_done": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "comment_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "attachment_count": {
+                        "type": "integer",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "allowed_moves",
                     "assignees",
+                    "attachment_count",
+                    "checklist_done",
+                    "checklist_total",
+                    "comment_count",
                     "created_at",
                     "id",
                     "is_overdue",
@@ -10188,12 +9829,6 @@
                     "task": {
                         "$ref": "#/components/schemas/TaskRef"
                     },
-                    "timesheet_id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "nullable": true,
-                        "readOnly": true
-                    },
                     "started_at": {
                         "type": "string",
                         "format": "date-time"
@@ -10231,15 +9866,20 @@
                         "type": "integer",
                         "maximum": 2147483647,
                         "minimum": 0
+                    },
+                    "is_locked": {
+                        "type": "boolean",
+                        "description": "True while the timer runs or once the task is in review, completed or cancelled.",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "elapsed_seconds",
                     "id",
+                    "is_locked",
                     "source",
                     "started_at",
                     "task",
-                    "timesheet_id",
                     "user",
                     "work_date"
                 ]
@@ -11624,37 +11264,6 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/TeamOutput"
-                        }
-                    }
-                }
-            },
-            "PaginatedTimesheetOutputList": {
-                "type": "object",
-                "required": [
-                    "count",
-                    "results"
-                ],
-                "properties": {
-                    "count": {
-                        "type": "integer",
-                        "example": 123
-                    },
-                    "next": {
-                        "type": "string",
-                        "nullable": true,
-                        "format": "uri",
-                        "example": "http://api.example.org/accounts/?page=4"
-                    },
-                    "previous": {
-                        "type": "string",
-                        "nullable": true,
-                        "format": "uri",
-                        "example": "http://api.example.org/accounts/?page=2"
-                    },
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/TimesheetOutput"
                         }
                     }
                 }
@@ -13846,139 +13455,6 @@
                     "user_id",
                     "work_date"
                 ]
-            },
-            "TimesheetDecisionEnum": {
-                "enum": [
-                    "APPROVED",
-                    "REJECTED"
-                ],
-                "type": "string",
-                "description": "* `APPROVED` - Approved\n* `REJECTED` - Rejected"
-            },
-            "TimesheetDecisionInputRequest": {
-                "type": "object",
-                "properties": {
-                    "comment": {
-                        "type": "string",
-                        "default": "",
-                        "maxLength": 2000
-                    }
-                }
-            },
-            "TimesheetDetail": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "readOnly": true
-                    },
-                    "user": {
-                        "$ref": "#/components/schemas/UserBrief"
-                    },
-                    "period_start": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "period_end": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/TimesheetStatusEnum"
-                    },
-                    "total_seconds": {
-                        "type": "integer",
-                        "maximum": 2147483647,
-                        "minimum": 0
-                    },
-                    "submitted_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    },
-                    "decided_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    },
-                    "entries": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/EntryOutput"
-                        },
-                        "readOnly": true
-                    },
-                    "approvals": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ApprovalOutput"
-                        }
-                    }
-                },
-                "required": [
-                    "approvals",
-                    "entries",
-                    "id",
-                    "period_end",
-                    "period_start",
-                    "user"
-                ]
-            },
-            "TimesheetOutput": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "readOnly": true
-                    },
-                    "user": {
-                        "$ref": "#/components/schemas/UserBrief"
-                    },
-                    "period_start": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "period_end": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/TimesheetStatusEnum"
-                    },
-                    "total_seconds": {
-                        "type": "integer",
-                        "maximum": 2147483647,
-                        "minimum": 0
-                    },
-                    "submitted_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    },
-                    "decided_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    }
-                },
-                "required": [
-                    "id",
-                    "period_end",
-                    "period_start",
-                    "user"
-                ]
-            },
-            "TimesheetStatusEnum": {
-                "enum": [
-                    "OPEN",
-                    "SUBMITTED",
-                    "APPROVED",
-                    "REJECTED"
-                ],
-                "type": "string",
-                "description": "* `OPEN` - Open\n* `SUBMITTED` - Submitted\n* `APPROVED` - Approved\n* `REJECTED` - Rejected"
             },
             "TransitionInputRequest": {
                 "type": "object",

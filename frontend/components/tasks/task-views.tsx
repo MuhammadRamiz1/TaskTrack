@@ -12,10 +12,10 @@ import {
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { addDays, endOfMonth, endOfWeek, format, isSameMonth, isToday, startOfMonth, startOfWeek } from "date-fns";
-import { CalendarClock, ChevronLeft, ChevronRight, Flag } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, Flag, ListChecks, MessageSquare, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ResponsiveTable } from "@/components/common/pager";
@@ -32,6 +32,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { AssignDialog, ReviewerDialog } from "./board-dialogs";
 import { BOARD_ROWS, canDrop, planDrop } from "./board-moves";
 import { PriorityBadge, STATUS_META, StatusBadge, type TaskStatus } from "./meta";
+import { TaskModal } from "./task-modal";
 
 export type TaskSummary = components["schemas"]["TaskSummary"];
 
@@ -154,28 +155,83 @@ function moveInCache(data: BoardData, id: string, to: TaskStatus): BoardData {
   };
 }
 
-function BoardCard({ task, onMove }: { task: BoardCardData; onMove: (to: TaskStatus) => void }) {
+const DOT: Record<string, string> = {
+  neutral: "bg-muted", primary: "bg-primary-500", success: "bg-success", warning: "bg-warning", danger: "bg-danger", info: "bg-info",
+};
+
+function progressTone(pct: number) {
+  if (pct >= 100) return { bar: "bg-success", text: "text-success" };
+  if (pct >= 50) return { bar: "bg-warning", text: "text-warning" };
+  if (pct > 0) return { bar: "bg-danger", text: "text-danger" };
+  return { bar: "bg-line", text: "text-muted" };
+}
+
+/** "Sep 17", "Sep 17–Oct 9" or "Oct 15–29" from start and due dates. */
+function dateRange(start?: string | null, due?: string | null) {
+  const one = due ?? start;
+  if (!start || !due || start === due) return one ? formatDate(one, "MMM d") : null;
+  const sameMonth = start.slice(0, 7) === due.slice(0, 7);
+  return `${formatDate(start, "MMM d")}–${formatDate(due, sameMonth ? "d" : "MMM d")}`;
+}
+
+function CardProgress({ task }: { task: BoardCardData }) {
+  const { checklist_done: done, checklist_total: total } = task;
+  if (!total) return null;
+  const pct = Math.round((done / total) * 100);
+  const tone = progressTone(pct);
+  return (
+    <div className="mt-1.5">
+      <p className="flex items-center gap-1 text-xs text-muted">
+        <ListChecks className="size-3.5" aria-hidden />
+        <span>{done}/{total}</span>
+        <span aria-hidden>•</span>
+        <span className={cn(pct === 100 && "font-semibold", tone.text)}>{pct}% completed</span>
+      </p>
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={pct}
+           aria-valuemin={0} aria-valuemax={100} aria-label={`${task.key} checklist`}>
+        <div className={cn("h-full rounded-full transition-[width]", tone.bar)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function BoardCard({ task, onMove, onOpen }: { task: BoardCardData; onMove: (to: TaskStatus) => void; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, data: task });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+  // A drag ends with a click on the card; this keeps that click from opening the modal.
+  const dragged = useRef(false);
+  useEffect(() => { if (isDragging) dragged.current = true; }, [isDragging]);
+  const range = dateRange(task.start_date, task.due_date);
   return (
     <article
       ref={setNodeRef}
       style={style}
+      onPointerDownCapture={() => { dragged.current = false; }}
+      onClick={(e) => {
+        if (dragged.current || (e.target as HTMLElement).closest("select")) return;
+        onOpen();
+      }}
       className={cn(
-        "rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow",
+        "cursor-pointer rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow hover:shadow-card",
         isDragging && "z-10 rotate-1 shadow-card",
       )}
     >
       <div {...listeners} {...attributes} className="cursor-grab touch-none active:cursor-grabbing" aria-roledescription="Draggable task"
            aria-label={`${task.key} ${task.title}. Press space to pick up, arrow keys to move, space to drop.`}>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="font-mono text-xs text-muted">{task.key}</span>
+        <div className="flex items-start justify-between gap-2">
+          <button
+            type="button"
+            aria-label={`Open ${task.key} details`}
+            className="line-clamp-2 text-left text-sm font-semibold text-ink hover:underline"
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+          >
+            {task.title}
+          </button>
           <PriorityBadge priority={task.priority!} compact />
         </div>
-        <Link href={`/tasks/${task.id}`} className="line-clamp-2 text-sm font-semibold text-ink hover:underline"
-              onPointerDown={(e) => e.stopPropagation()}>
-          {task.title}
-        </Link>
+        <CardProgress task={task} />
       </div>
       {(task.status === "BLOCKED" || task.needs_reassignment) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -183,15 +239,33 @@ function BoardCard({ task, onMove }: { task: BoardCardData; onMove: (to: TaskSta
           {task.needs_reassignment && <Badge tone="warning">Needs reassignment</Badge>}
         </div>
       )}
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <Assignees task={task} max={2} />
-        <span className="flex items-center gap-2">
-          {task.status === "IN_REVIEW" && task.reviewer && (
-            <span aria-label={`Reviewer: ${task.reviewer.full_name}`} title={`Reviewer: ${task.reviewer.full_name}`}>
-              <Avatar name={task.reviewer.full_name} className="size-6 ring-2 ring-surface" />
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
+          <span className="font-mono">{task.key}</span>
+          {task.attachment_count > 0 && (
+            <span className="inline-flex items-center gap-0.5" aria-label={`${task.attachment_count} attachment${task.attachment_count === 1 ? "" : "s"}`}>
+              <Paperclip className="size-3.5" aria-hidden />{task.attachment_count}
             </span>
           )}
-          <Due task={task} />
+          {task.comment_count > 0 && (
+            <span className="inline-flex items-center gap-0.5" aria-label={`${task.comment_count} comment${task.comment_count === 1 ? "" : "s"}`}>
+              <MessageSquare className="size-3.5" aria-hidden />{task.comment_count}
+            </span>
+          )}
+          {range && (
+            <span className={cn("inline-flex items-center gap-1", task.is_overdue && "font-semibold text-danger")}>
+              <Clock className="size-3.5" aria-hidden />{range}
+              {task.is_overdue && <span className="sr-only">(overdue)</span>}
+            </span>
+          )}
+        </span>
+        <span className="flex flex-none items-center gap-1.5">
+          {task.status === "IN_REVIEW" && task.reviewer && (
+            <span aria-label={`Reviewer: ${task.reviewer.full_name}`} title={`Reviewer: ${task.reviewer.full_name}`}>
+              <Avatar name={task.reviewer.full_name} className="size-6 opacity-80 ring-2 ring-surface" />
+            </span>
+          )}
+          {task.assignees.length > 0 && <Assignees task={task} max={2} />}
         </span>
       </div>
       <Select
@@ -207,26 +281,32 @@ function BoardCard({ task, onMove }: { task: BoardCardData; onMove: (to: TaskSta
   );
 }
 
-function Column({ status, tasks, dimmed, onMove }: {
-  status: TaskStatus; tasks: BoardCardData[]; dimmed: boolean; onMove: (t: BoardCardData, to: TaskStatus) => void;
+function Column({ status, tasks, dimmed, onMove, onOpen }: {
+  status: TaskStatus; tasks: BoardCardData[]; dimmed: boolean;
+  onMove: (t: BoardCardData, to: TaskStatus) => void; onOpen: (t: BoardCardData) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status, disabled: dimmed });
+  const meta = STATUS_META[status];
   return (
     <section
       ref={setNodeRef}
-      aria-label={`${STATUS_META[status].label}, ${tasks.length} tasks`}
+      aria-label={`${meta.label}, ${tasks.length} tasks`}
       className={cn(
-        "flex min-w-0 flex-col rounded-2xl bg-surface-2 p-2.5 transition-[background-color,opacity]",
+        "flex min-w-0 flex-col self-start rounded-2xl border border-line/60 bg-surface-2/80 p-2.5 shadow-sm transition-[background-color,opacity]",
         dimmed && "opacity-40",
         isOver && "bg-primary-100 ring-2 ring-primary-300",
       )}
     >
-      <header className="mb-2 flex items-center justify-between px-1">
-        <StatusBadge status={status} />
-        <span className="text-xs font-bold text-muted">{tasks.length}</span>
+      <header className="mb-2.5 flex items-center justify-between gap-2 px-1.5 pt-0.5">
+        <h3 className={cn("flex items-center gap-2 text-sm font-bold text-ink", status === "CANCELLED" && "line-through")}>
+          <span className={cn("size-2.5 rounded-full ring-2 ring-surface", DOT[meta.tone])} aria-hidden />
+          {meta.label}
+        </h3>
+        <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-muted">{tasks.length}</span>
       </header>
-      <div className="flex min-h-24 flex-col gap-2">
-        {tasks.map((t) => <BoardCard key={t.id} task={t} onMove={(to) => onMove(t, to)} />)}
+      <div className="flex min-h-24 flex-col gap-2.5">
+        {tasks.map((t) => <BoardCard key={t.id} task={t} onMove={(to) => onMove(t, to)} onOpen={() => onOpen(t)} />)}
+        {tasks.length === 0 && <p className="grid min-h-20 place-items-center rounded-xl border border-dashed border-line text-xs text-muted">No tasks</p>}
       </div>
     </section>
   );
@@ -238,6 +318,7 @@ export function TaskBoard({ projectId }: { projectId: string }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
   const [active, setActive] = useState<BoardCardData | null>(null);
   const [pending, setPending] = useState<PendingDialog | null>(null);
+  const [opened, setOpened] = useState<BoardCardData | null>(null);
 
   const call = async (card: BoardCardData, to: TaskStatus, step: BoardStep) => {
     const path = { params: { path: { task_id: card.id } } };
@@ -320,11 +401,20 @@ export function TaskBoard({ projectId }: { projectId: string }) {
                     tasks={data.columns.find((c) => c.status === status)?.tasks ?? []}
                     dimmed={Boolean(active) && active!.status !== status && !canDrop(active!, status)}
                     onMove={start}
+                    onOpen={setOpened}
                   />
                 ))}
               </div>
             ))}
           </div>
+          <TaskModal
+            taskId={opened?.id ?? null}
+            title={opened?.title ?? ""}
+            onClose={() => {
+              setOpened(null);
+              void qc.invalidateQueries({ queryKey: BOARD_KEY }); // checklist, comment and file counts may have changed
+            }}
+          />
           <AssignDialog taskKey={p?.card.key ?? ""} open={p?.dialog === "assign"} onCancel={cancel}
                         onConfirm={(userIds) => p && void execute(p.card, p.to, { kind: "assign", userIds })} />
           <ReviewerDialog taskKey={p?.card.key ?? ""} open={p?.dialog === "reviewer"} onCancel={cancel}

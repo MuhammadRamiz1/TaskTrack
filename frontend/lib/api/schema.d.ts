@@ -2073,23 +2073,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/time/approvals/queue/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Timesheets waiting for me */
-        get: operations["time_approvals_queue_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/time/entries/": {
         parameters: {
             query?: never;
@@ -2228,125 +2211,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/time/timesheets/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Timesheets you can see */
-        get: operations["time_timesheets_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/{timesheet_id}/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Timesheet with entries and decisions */
-        get: operations["time_timesheets_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/{timesheet_id}/approvals/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Approval history */
-        get: operations["time_timesheets_approvals_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/{timesheet_id}/approve/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Approve a timesheet */
-        post: operations["time_timesheets_approve_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/{timesheet_id}/reject/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Reject a timesheet (comment required); entries become editable again */
-        post: operations["time_timesheets_reject_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/{timesheet_id}/submit/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit my week for approval */
-        post: operations["time_timesheets_submit_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/time/timesheets/current/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** My timesheet for this week */
-        get: operations["time_timesheets_current_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2382,15 +2246,6 @@ export interface components {
             to_status: components["schemas"]["TaskStatusEnum"];
             requires_comment: boolean;
         };
-        ApprovalOutput: {
-            /** Format: uuid */
-            readonly id: string;
-            approver: components["schemas"]["UserBrief"];
-            decision: components["schemas"]["TimesheetDecisionEnum"];
-            comment?: string;
-            /** Format: date-time */
-            readonly created_at: string;
-        };
         AssignInputRequest: {
             user_ids: string[];
         };
@@ -2417,6 +2272,11 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
         };
+        AuditChange: {
+            field: string;
+            before: string;
+            after: string;
+        };
         AuditLogOutput: {
             /** Format: uuid */
             readonly id: string;
@@ -2430,6 +2290,10 @@ export interface components {
             /** Format: uuid */
             impersonator_id?: string | null;
             action: string;
+            /** @description What happened, as a plain-English sentence. */
+            readonly summary: string;
+            /** @description Changed fields in words (no codes or ids). */
+            readonly changes: components["schemas"]["AuditChange"][];
             entity_type?: string;
             entity_id?: string;
             old_value?: unknown;
@@ -2465,6 +2329,10 @@ export interface components {
             /** Format: date-time */
             readonly updated_at: string;
             readonly allowed_moves: components["schemas"]["AllowedMove"][];
+            readonly checklist_total: number;
+            readonly checklist_done: number;
+            readonly comment_count: number;
+            readonly attachment_count: number;
         };
         BoardColumnOutput: {
             status: components["schemas"]["TaskStatusEnum"];
@@ -2760,8 +2628,6 @@ export interface components {
             readonly id: string;
             user: components["schemas"]["UserBrief"];
             task: components["schemas"]["TaskRef"];
-            /** Format: uuid */
-            readonly timesheet_id: string | null;
             /** Format: date-time */
             started_at: string;
             /** Format: date-time */
@@ -2777,6 +2643,8 @@ export interface components {
             status?: components["schemas"]["TimeEntryStatusEnum"];
             note?: string;
             version?: number;
+            /** @description True while the timer runs or once the task is in review, completed or cancelled. */
+            readonly is_locked: boolean;
         };
         ExportInputRequest: {
             /** Format: date */
@@ -3312,21 +3180,6 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["TeamOutput"][];
-        };
-        PaginatedTimesheetOutputList: {
-            /** @example 123 */
-            count: number;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=4
-             */
-            next?: string | null;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=2
-             */
-            previous?: string | null;
-            results: components["schemas"]["TimesheetOutput"][];
         };
         PatchedChecklistItemUpdateInputRequest: {
             text?: string;
@@ -4003,56 +3856,6 @@ export interface components {
             hours: number;
             entries: number;
         };
-        /**
-         * @description * `APPROVED` - Approved
-         *     * `REJECTED` - Rejected
-         * @enum {string}
-         */
-        TimesheetDecisionEnum: "APPROVED" | "REJECTED";
-        TimesheetDecisionInputRequest: {
-            /** @default  */
-            comment?: string;
-        };
-        TimesheetDetail: {
-            /** Format: uuid */
-            readonly id: string;
-            user: components["schemas"]["UserBrief"];
-            /** Format: date */
-            period_start: string;
-            /** Format: date */
-            period_end: string;
-            status?: components["schemas"]["TimesheetStatusEnum"];
-            total_seconds?: number;
-            /** Format: date-time */
-            submitted_at?: string | null;
-            /** Format: date-time */
-            decided_at?: string | null;
-            readonly entries: components["schemas"]["EntryOutput"][];
-            approvals: components["schemas"]["ApprovalOutput"][];
-        };
-        TimesheetOutput: {
-            /** Format: uuid */
-            readonly id: string;
-            user: components["schemas"]["UserBrief"];
-            /** Format: date */
-            period_start: string;
-            /** Format: date */
-            period_end: string;
-            status?: components["schemas"]["TimesheetStatusEnum"];
-            total_seconds?: number;
-            /** Format: date-time */
-            submitted_at?: string | null;
-            /** Format: date-time */
-            decided_at?: string | null;
-        };
-        /**
-         * @description * `OPEN` - Open
-         *     * `SUBMITTED` - Submitted
-         *     * `APPROVED` - Approved
-         *     * `REJECTED` - Rejected
-         * @enum {string}
-         */
-        TimesheetStatusEnum: "OPEN" | "SUBMITTED" | "APPROVED" | "REJECTED";
         TransitionInputRequest: {
             to_status: components["schemas"]["TaskStatusEnum"];
             /** @default  */
@@ -4144,6 +3947,19 @@ export interface operations {
             query?: {
                 action?: string;
                 actor?: string;
+                /**
+                 * @description Kind of activity
+                 *
+                 *     * `tasks` - Tasks
+                 *     * `organization` - Organization
+                 *     * `people` - People
+                 *     * `security` - Security
+                 *     * `roles` - Roles
+                 *     * `time` - Time
+                 *     * `reports` - Reports
+                 *     * `settings` - Settings
+                 */
+                category?: "organization" | "people" | "reports" | "roles" | "security" | "settings" | "tasks" | "time";
                 date_from?: string;
                 date_to?: string;
                 entity_id?: string;
@@ -6183,6 +5999,19 @@ export interface operations {
             query?: {
                 action?: string;
                 actor?: string;
+                /**
+                 * @description Kind of activity
+                 *
+                 *     * `tasks` - Tasks
+                 *     * `organization` - Organization
+                 *     * `people` - People
+                 *     * `security` - Security
+                 *     * `roles` - Roles
+                 *     * `time` - Time
+                 *     * `reports` - Reports
+                 *     * `settings` - Settings
+                 */
+                category?: "organization" | "people" | "reports" | "roles" | "security" | "settings" | "tasks" | "time";
                 company?: string;
                 date_from?: string;
                 date_to?: string;
@@ -8028,30 +7857,6 @@ export interface operations {
             };
         };
     };
-    time_approvals_queue_list: {
-        parameters: {
-            query?: {
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedTimesheetOutputList"];
-                };
-            };
-        };
-    };
     time_entries_list: {
         parameters: {
             query?: {
@@ -8292,178 +8097,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CurrentTimerOutput"];
-                };
-            };
-        };
-    };
-    time_timesheets_list: {
-        parameters: {
-            query?: {
-                /** @description Which field to use when ordering the results. */
-                ordering?: string;
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-                period_from?: string;
-                period_to?: string;
-                /** @description A search term. */
-                search?: string;
-                /**
-                 * @description * `OPEN` - Open
-                 *     * `SUBMITTED` - Submitted
-                 *     * `APPROVED` - Approved
-                 *     * `REJECTED` - Rejected
-                 */
-                status?: ("APPROVED" | "OPEN" | "REJECTED" | "SUBMITTED")[];
-                user?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedTimesheetOutputList"];
-                };
-            };
-        };
-    };
-    time_timesheets_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                timesheet_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimesheetDetail"];
-                };
-            };
-        };
-    };
-    time_timesheets_approvals_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                timesheet_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalOutput"][];
-                };
-            };
-        };
-    };
-    time_timesheets_approve_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                timesheet_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["TimesheetDecisionInputRequest"];
-                "multipart/form-data": components["schemas"]["TimesheetDecisionInputRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimesheetDetail"];
-                };
-            };
-        };
-    };
-    time_timesheets_reject_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                timesheet_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["TimesheetDecisionInputRequest"];
-                "multipart/form-data": components["schemas"]["TimesheetDecisionInputRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimesheetDetail"];
-                };
-            };
-        };
-    };
-    time_timesheets_submit_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                timesheet_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimesheetDetail"];
-                };
-            };
-        };
-    };
-    time_timesheets_current_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimesheetDetail"];
                 };
             };
         };

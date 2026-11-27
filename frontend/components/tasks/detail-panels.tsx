@@ -450,7 +450,7 @@ export function TimeLogPanel({ task }: { task: TaskDetail }) {
   return (
     <Card>
       <CardHeader title="Time" description={`${formatDuration(total)} logged${task.estimated_minutes ? ` of ${formatDuration(task.estimated_minutes * 60)} estimated` : ""}`}
-                  action={isAssignee && !task.is_read_only && <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Plus /> Log time</Button>} />
+                  action={isAssignee && !task.is_read_only && task.status !== "IN_REVIEW" && <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Plus /> Log time</Button>} />
       <QueryState query={entries} rows={2} isEmpty={(d) => !d.length} empty={<p className="px-5 py-4 text-sm text-muted">No time logged yet.</p>}>
         {(items) => (
           <ul className="divide-y divide-line">

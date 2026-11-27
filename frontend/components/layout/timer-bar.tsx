@@ -40,7 +40,6 @@ export function useTimerActions() {
   const qc = useQueryClient();
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: TIMER_QUERY });
-    void qc.invalidateQueries({ queryKey: ["get", "/api/v1/time/timesheets/current/"] });
     void qc.invalidateQueries({ queryKey: ["get", "/api/v1/tasks/{task_id}/"] });
     void qc.invalidateQueries({ queryKey: ["get", "/api/v1/tasks/"] });
   };

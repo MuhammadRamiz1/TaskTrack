@@ -67,6 +67,8 @@ export default function TaskDetailPage() {
   const task = query.data;
   const isAssignee = task.assignees.some((a) => a.user.id === me.id);
   const manual = task.allowed_transitions.filter((t) => t.to_status !== "REOPENED");
+  // Only the creator may delete, and only before work starts (the API enforces the same rule).
+  const deletable = can("task.delete") && task.created_by.id === me.id && (task.status === "BACKLOG" || task.status === "ASSIGNED");
   const timerable = isAssignee && ["ASSIGNED", "IN_PROGRESS", "REOPENED"].includes(task.status!);
 
   return (
@@ -113,7 +115,7 @@ export default function TaskDetailPage() {
           {can("task.update") && !task.is_read_only && task.status !== "IN_REVIEW" && (
             <Button variant="outline" onClick={() => setEditing(true)}><Pencil /> Edit</Button>
           )}
-          {can("task.delete") && (
+          {deletable && (
             <Button variant="ghost" size="icon" aria-label="Delete task" onClick={() => setConfirm("delete")}><Trash2 /></Button>
           )}
         </div>

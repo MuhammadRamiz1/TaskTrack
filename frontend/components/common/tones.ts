@@ -9,9 +9,3 @@ export const INVITE_TONE: Record<string, Tone> = {
   revoked: "neutral",
   none: "neutral",
 };
-export const TIMESHEET_TONE: Record<string, Tone> = {
-  OPEN: "neutral",
-  SUBMITTED: "info",
-  APPROVED: "success",
-  REJECTED: "danger",
-};

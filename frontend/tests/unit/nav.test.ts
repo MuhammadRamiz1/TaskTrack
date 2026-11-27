@@ -12,7 +12,7 @@ describe("role-aware navigation", () => {
       APP_NAV,
       user({ "task.view": ["OWN"], "time.track": ["OWN"], "dashboard.member.view": ["OWN"] }),
     ).map((i) => i.label);
-    expect(labels).toEqual(["Dashboard", "My tasks", "Tasks", "Timesheets", "Settings"]);
+    expect(labels).toEqual(["Dashboard", "My tasks", "Tasks", "Settings"]);
   });
 
   it("shows HR people tools but no task screens", () => {

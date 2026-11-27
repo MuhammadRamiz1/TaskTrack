@@ -3,7 +3,6 @@ import {
   Building2,
   CheckSquare,
   ClipboardCheck,
-  Clock,
   CreditCard,
   FileSearch,
   LayoutDashboard,
@@ -11,7 +10,6 @@ import {
   type LucideIcon,
   Network,
   Settings,
-  Stamp,
   Users,
 } from "lucide-react";
 
@@ -33,8 +31,6 @@ export const APP_NAV: NavItem[] = [
   { href: "/my-tasks", label: "My tasks", icon: CheckSquare, anyOf: ["time.track"], primary: true },
   { href: "/tasks", label: "Tasks", icon: ListTodo, anyOf: ["task.view"], primary: true },
   { href: "/reviews", label: "Reviews", icon: ClipboardCheck, anyOf: ["review.decide"] },
-  { href: "/timesheets", label: "Timesheets", icon: Clock, anyOf: ["time.track"] },
-  { href: "/approvals", label: "Approvals", icon: Stamp, anyOf: ["timesheet.approve"] },
   { href: "/reports", label: "Reports", icon: BarChart3, anyOf: ["report.view"] },
   { href: "/hr/employees", label: "People", icon: Users, anyOf: ["employee.create", "employee.assign_role"] },
   { href: "/hr/org", label: "Organization", icon: Network, anyOf: ["team.manage", "project.manage", "leave.manage"] },
