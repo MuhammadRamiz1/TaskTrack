@@ -21,7 +21,7 @@ const PAGE_SIZE = 25;
 function TasksScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const view = params.get("view") ?? "list";
+  const view = params.get("view") ?? "board";
   const [page, setPage] = useState(1);
   const [search, rawSetSearch] = useState(params.get("search") ?? "");
   const [project, rawSetProject] = useState(params.get("project") ?? "");

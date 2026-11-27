@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.common.tasks import TenantTask, send_templated_email
 
-ENTITY_PATHS = {"task": "/tasks/{id}", "timesheet": "/timesheets/{id}", "reportexport": "/reports"}
+ENTITY_PATHS = {"task": "/tasks/{id}", "reportexport": "/reports"}
 
 
 @shared_task(name="notifications.send_email", base=TenantTask, bind=True)

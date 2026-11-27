@@ -450,7 +450,7 @@ export function TimeLogPanel({ task }: { task: TaskDetail }) {
   return (
     <Card>
       <CardHeader title="Time" description={`${formatDuration(total)} logged${task.estimated_minutes ? ` of ${formatDuration(task.estimated_minutes * 60)} estimated` : ""}`}
-                  action={isAssignee && !task.is_read_only && <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Plus /> Log time</Button>} />
+                  action={isAssignee && !task.is_read_only && task.status !== "IN_REVIEW" && <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Plus /> Log time</Button>} />
       <QueryState query={entries} rows={2} isEmpty={(d) => !d.length} empty={<p className="px-5 py-4 text-sm text-muted">No time logged yet.</p>}>
         {(items) => (
           <ul className="divide-y divide-line">
@@ -515,11 +515,22 @@ export function ActivityPanel({ taskId }: { taskId: string }) {
                 <li key={a.id} className="relative flex gap-3 text-sm">
                   <span className="z-[1] mt-1 size-3 shrink-0 rounded-full border-2 border-primary-500 bg-surface ml-[6px]" aria-hidden />
                   <div className="min-w-0">
-                    <p><span className="font-semibold text-ink">{a.actor?.full_name ?? "System"}</span> {VERB[a.verb] ?? a.verb}
-                      {a.verb === "status_changed" && d.to && <> to <StatusBadge status={d.to as never} /></>}
+                    <p className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-ink">{a.actor?.full_name ?? "System"}</span>
+                      {a.verb === "status_changed" && d.to ? (
+                        <>
+                          moved
+                          {d.from && <><StatusBadge status={d.from as never} /><span aria-hidden>→</span></>}
+                          <StatusBadge status={d.to as never} />
+                          <span className="text-muted">·</span>
+                          <span className="text-muted" title={formatDateTime(a.created_at)}>{timeAgo(a.created_at)}</span>
+                        </>
+                      ) : (
+                        VERB[a.verb] ?? a.verb
+                      )}
                     </p>
                     {d.comment && <p className="text-muted">“{d.comment}”</p>}
-                    <p className="text-xs text-muted">{formatDateTime(a.created_at)}</p>
+                    {!(a.verb === "status_changed" && d.to) && <p className="text-xs text-muted">{formatDateTime(a.created_at)}</p>}
                   </div>
                 </li>
               );

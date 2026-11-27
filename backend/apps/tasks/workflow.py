@@ -56,7 +56,7 @@ def rules_from(task: Task, trigger: str = Trigger.MANUAL):
     )
 
 
-def _actor_allowed(actor, rule: StatusTransitionRule, task: Task) -> bool:
+def actor_allowed(actor, rule: StatusTransitionRule, task: Task) -> bool:
     if rule.trigger == Trigger.SYSTEM:
         return True
     if rule.trigger != Trigger.ASSIGN and not policy.can(actor, "task.transition", task):
@@ -71,7 +71,7 @@ def allowed_targets(actor, task: Task) -> list[dict]:
     return [
         {"to_status": r.to_status, "requires_comment": r.requires_comment}
         for r in rules_from(task)
-        if _actor_allowed(actor, r, task)
+        if actor_allowed(actor, r, task)
     ]
 
 
@@ -117,7 +117,7 @@ def transition_task(
                 f"Cannot move the task from {task.status} to {to_status}.",
                 details={"allowed": [t["to_status"] for t in allowed_targets(actor, task)] if actor else []},
             )
-        if actor is not None and not _actor_allowed(actor, rule, task):
+        if actor is not None and not actor_allowed(actor, rule, task):
             raise InvalidTransition(
                 "Your role cannot make this status change.",
                 code="transition_not_allowed",

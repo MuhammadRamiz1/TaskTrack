@@ -1,6 +1,6 @@
 """Task review workflow: submit, approve, request changes.
 
-Separate from timesheet approval by design (different app, tables and endpoints). Status
+Separate from time tracking by design (different app, tables and endpoints). Status
 changes go through tasks.workflow.transition_task with the SUBMIT / APPROVE /
 REQUEST_CHANGES triggers, which the generic transition endpoint cannot use.
 """
@@ -83,6 +83,22 @@ def submit(*, actor, task_id, note: str = "") -> TaskReview:
         return review
 
 
+def _decide_block(actor, task: Task, review: TaskReview) -> str | None:
+    """Why ``actor`` may not decide ``review``: ``not_reviewer``, ``self_review`` or None."""
+    company_wide = _company_wide_reviewer(actor)
+    if actor.pk != review.reviewer_id and not company_wide:
+        return "not_reviewer"
+    is_assignee = any(a.user_id == actor.pk for a in task.assignees.all())
+    if is_assignee and not (task.company.allow_self_review and company_wide):
+        return "self_review"
+    return None
+
+
+def can_decide(actor, task: Task, review: TaskReview) -> bool:
+    """True when ``actor`` may approve or request changes on the task's open review."""
+    return policy.can(actor, "review.decide", task) and _decide_block(actor, task, review) is None
+
+
 def _decide(actor, task_id, *, approve: bool, comment: str) -> TaskReview:
     comment = (comment or "").strip()
     with transaction.atomic():
@@ -91,11 +107,10 @@ def _decide(actor, task_id, *, approve: bool, comment: str) -> TaskReview:
         review = _pending(task)
         if review is None or task.status != Status.IN_REVIEW:
             raise Conflict("There is no open review for this task.", code="no_open_review")
-        company_wide = _company_wide_reviewer(actor)
-        if actor.pk != review.reviewer_id and not company_wide:
+        blocked = _decide_block(actor, task, review)
+        if blocked == "not_reviewer":
             raise Forbidden("Only the assigned reviewer can decide this review.", code="not_reviewer")
-        is_assignee = task.assignees.filter(user=actor).exists()
-        if is_assignee and not (task.company.allow_self_review and company_wide):
+        if blocked == "self_review":
             raise Forbidden("You cannot review a task you are assigned to.", code="self_review")
         if not approve and not comment:
             raise InvalidInput(

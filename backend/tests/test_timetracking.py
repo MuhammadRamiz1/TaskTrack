@@ -1,4 +1,4 @@
-"""Timer rules, manual entries, timesheets and their approval (separate from task review)."""
+"""Timer rules and manual entries; entries lock by task status."""
 
 import threading
 from datetime import timedelta
@@ -10,7 +10,7 @@ from freezegun import freeze_time
 
 from apps.notifications.models import Notification
 from apps.tasks.models import Status, Task
-from apps.timetracking.models import TimeEntry, Timesheet, TimesheetApproval
+from apps.timetracking.models import TimeEntry
 from tests import factories as f
 
 TIME = "/api/v1/time/"
@@ -180,7 +180,9 @@ class TestManualEntries:
         assert response.status_code == 409
 
 
-class TestTimesheets:
+class TestTaskStatusLock:
+    """Time follows the task's status: locked in review, completed or cancelled. No timesheets."""
+
     def log(self, world, task, hours_ago=3, minutes=90):
         client = f.client_for(world.member)
         start_at = timezone.now() - timedelta(hours=hours_ago)
@@ -194,76 +196,54 @@ class TestTimesheets:
             format="json",
         ).json()
 
-    def test_submit_approve_flow(self, world, task):
-        world.member.manager = world.manager
-        world.member.save()
+    def test_entries_lock_in_review_and_unlock_on_changes_requested(self, world, task):
+        from apps.tasks.workflow import transition_task
+
+        transition_task(actor=world.member, task_id=task.pk, to_status=Status.IN_PROGRESS)
         entry = self.log(world, task)
+        assert entry["is_locked"] is False
         member = f.client_for(world.member)
-        sheet = member.get(f"{TIME}timesheets/current/").json()
-        assert sheet["total_seconds"] == 90 * 60 and len(sheet["entries"]) == 1
-        submitted = member.post(f"{TIME}timesheets/{sheet['id']}/submit/")
-        assert submitted.json()["status"] == "SUBMITTED"
-        assert Notification.objects.filter(recipient=world.manager, event_type="timesheet.submitted").exists()
-        locked = member.patch(
+        assert member.post(f"/api/v1/tasks/{task.pk}/review/submit/", {}, format="json").status_code == 201
+        listed = member.get(f"{TIME}entries/?task={task.pk}").json()["results"][0]
+        assert listed["is_locked"] is True
+        url = f"{TIME}entries/{entry['id']}/"
+        locked = member.patch(url, {"version": entry["version"], "note": "x"}, format="json")
+        assert locked.status_code == 409 and locked.json()["error"]["code"] == "task_locked"
+        assert member.delete(url).status_code == 409
+        assert self.log(world, task, hours_ago=8, minutes=10)["error"]["code"] == "task_locked"
+
+        changes = f.client_for(world.manager).post(
+            f"/api/v1/tasks/{task.pk}/review/request-changes/", {"comment": "More tests"}, format="json"
+        )
+        assert changes.status_code == 200, changes.content
+        assert member.patch(url, {"version": entry["version"], "note": "fixed"}, format="json").status_code == 200
+
+    def test_running_entry_is_locked(self, world, task):
+        body = start(f.client_for(world.member), task).json()
+        assert body["entry"]["is_locked"] is True
+
+    def test_manager_cannot_correct_locked_entry(self, world, task):
+        from apps.tasks.workflow import transition_task
+
+        entry = self.log(world, task)
+        transition_task(actor=world.manager, task_id=task.pk, to_status=Status.CANCELLED, comment="x")
+        fixed = f.client_for(world.manager).patch(
             f"{TIME}entries/{entry['id']}/", {"version": entry["version"], "note": "x"}, format="json"
         )
-        assert locked.status_code == 409 and locked.json()["error"]["code"] == "timesheet_locked"
-        assert member.post(f"{TIME}timesheets/{sheet['id']}/approve/", {}, format="json").status_code == 403
-        manager = f.client_for(world.manager)
-        queue = manager.get(f"{TIME}approvals/queue/").json()["results"]
-        assert [q["id"] for q in queue] == [sheet["id"]]
-        approved = manager.post(f"{TIME}timesheets/{sheet['id']}/approve/", {"comment": "ok"}, format="json")
-        assert approved.json()["status"] == "APPROVED"
-        assert TimeEntry.objects.get(pk=entry["id"]).status == "APPROVED"
-        assert [a["decision"] for a in manager.get(f"{TIME}timesheets/{sheet['id']}/approvals/").json()] == ["APPROVED"]
+        assert fixed.status_code == 409 and fixed.json()["error"]["code"] == "task_locked"
 
-    def test_reject_reopens_entries(self, world, task):
-        entry = self.log(world, task)
-        member, manager = f.client_for(world.member), f.client_for(world.manager)
-        sheet_id = member.get(f"{TIME}timesheets/current/").json()["id"]
-        member.post(f"{TIME}timesheets/{sheet_id}/submit/")
-        assert manager.post(f"{TIME}timesheets/{sheet_id}/reject/", {}, format="json").status_code == 400
-        rejected = manager.post(f"{TIME}timesheets/{sheet_id}/reject/", {"comment": "Missing Friday"}, format="json")
-        assert rejected.json()["status"] == "REJECTED"
-        fixed = member.patch(
-            f"{TIME}entries/{entry['id']}/", {"version": entry["version"], "note": "fixed"}, format="json"
-        )
-        assert fixed.status_code == 200
-        assert member.post(f"{TIME}timesheets/{sheet_id}/submit/").json()["status"] == "SUBMITTED"
-        assert TimesheetApproval.objects.filter(timesheet_id=sheet_id).count() == 1
-
-    def test_cannot_submit_with_running_timer_or_empty(self, world, task):
+    def test_timesheet_routes_are_gone(self, world):
         member = f.client_for(world.member)
-        sheet_id = member.get(f"{TIME}timesheets/current/").json()["id"]
-        assert member.post(f"{TIME}timesheets/{sheet_id}/submit/").json()["error"]["code"] == "timesheet_empty"
-        start(member, task)
-        assert member.post(f"{TIME}timesheets/{sheet_id}/submit/").json()["error"]["code"] == "timer_running"
+        for url in ("timesheet/", "timesheets/", "timesheets/current/", "approvals/queue/"):
+            assert member.get(f"{TIME}{url}").status_code == 404
 
-    def test_timer_blocked_in_submitted_week(self, world, task):
-        self.log(world, task)
-        member = f.client_for(world.member)
-        sheet_id = member.get(f"{TIME}timesheets/current/").json()["id"]
-        member.post(f"{TIME}timesheets/{sheet_id}/submit/")
-        response = start(member, task)
-        assert response.status_code == 409 and response.json()["error"]["code"] == "timesheet_locked"
-
-    def test_lead_cannot_approve_by_default(self, world, task):
-        self.log(world, task)
-        member = f.client_for(world.member)
-        sheet_id = member.get(f"{TIME}timesheets/current/").json()["id"]
-        member.post(f"{TIME}timesheets/{sheet_id}/submit/")
-        assert (
-            f.client_for(world.lead).post(f"{TIME}timesheets/{sheet_id}/approve/", {}, format="json").status_code == 403
-        )
-
-    def test_timesheet_review_is_separate_from_task_review(self):
+    def test_time_is_separate_from_task_review(self):
         import ast
         import pathlib
 
         source = pathlib.Path("apps/timetracking/services.py").read_text()
         imported = {node.module for node in ast.walk(ast.parse(source)) if isinstance(node, ast.ImportFrom)}
         assert not any(m and m.startswith("apps.reviews") for m in imported)
-        assert Timesheet._meta.db_table != "reviews_taskreview"
 
 
 @pytest.mark.django_db(transaction=True, serialized_rollback=True)

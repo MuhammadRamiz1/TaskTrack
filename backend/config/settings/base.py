@@ -140,10 +140,6 @@ CELERY_BEAT_SCHEDULE = {
     "dispatch-scheduled-reports": {"task": "reports.dispatch_scheduled_reports", "schedule": crontab(minute="*/15")},
     "send-due-reminders": {"task": "tasks.send_due_reminders", "schedule": crontab(minute=5)},
     "notify-long-blocked": {"task": "tasks.notify_long_blocked", "schedule": crontab(hour=4, minute=0)},
-    "remind-timesheet-submission": {
-        "task": "timetracking.remind_timesheet_submission",
-        "schedule": crontab(hour=5, minute=0),
-    },
     "purge-expired-exports": {"task": "reports.purge_expired_exports", "schedule": crontab(hour=2, minute=0)},
     "purge-orphan-files": {"task": "tasks.purge_orphan_files", "schedule": crontab(hour=2, minute=30)},
     "purge-old-notifications": {"task": "notifications.purge_old", "schedule": crontab(hour=3, minute=0)},
@@ -252,8 +248,6 @@ SPECTACULAR_SETTINGS = {
         "LeaveKindEnum": "apps.org.models.LeaveDay.Kind",
         "CommentKindEnum": "apps.tasks.models.TaskComment.Kind",
         "ReviewDecisionEnum": "apps.reviews.models.TaskReview.Decision",
-        "TimesheetDecisionEnum": "apps.timetracking.models.TimesheetApproval.Decision",
-        "TimesheetStatusEnum": "apps.timetracking.models.Timesheet.Status",
         "TimeEntryStatusEnum": "apps.timetracking.models.TimeEntry.Status",
     },
 }

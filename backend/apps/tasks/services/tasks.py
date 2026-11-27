@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.audit.services import diff, record, snapshot
-from apps.common.exceptions import Conflict, InvalidInput, NotFound
+from apps.common.exceptions import Conflict, Forbidden, InvalidInput, NotFound
 from apps.org.models import Project
 from apps.rbac import policy
 
@@ -178,10 +178,27 @@ def set_priority(*, actor, task_id, priority: str, expected_version) -> Task:
         return task
 
 
+#: Work has not started yet: only these tasks can be deleted.
+DELETABLE_STATUSES = frozenset({Status.BACKLOG, Status.ASSIGNED})
+
+
+def _require_owner(actor, task: Task) -> None:
+    """Deleting and restoring is for the person who created the task (and holds task.delete)."""
+    policy.require(actor, "task.delete", task)
+    if task.created_by_id != actor.pk:
+        raise Forbidden("Only the person who created this task can delete or restore it.", code="not_task_owner")
+
+
 def delete_task(*, actor, task_id) -> None:
     with transaction.atomic():
         task = get_task(actor, task_id, for_update=True)
-        policy.require(actor, "task.delete", task)
+        _require_owner(actor, task)
+        if task.status not in DELETABLE_STATUSES:
+            raise Conflict(
+                "Only tasks in Backlog or Assigned can be deleted; work on this one has started or finished.",
+                code="task_not_pending",
+                details={"status": task.status},
+            )
         if Task.objects.filter(parent=task).exists():
             raise Conflict("Delete or move the subtasks first.", code="task_has_subtasks")
         task.deleted_at = timezone.now()
@@ -194,7 +211,7 @@ def delete_task(*, actor, task_id) -> None:
 def restore_task(*, actor, task_id) -> Task:
     with transaction.atomic():
         task = get_task(actor, task_id, include_deleted=True, for_update=True)
-        policy.require(actor, "task.delete", task)
+        _require_owner(actor, task)
         if task.deleted_at is None:
             raise Conflict("The task is not deleted.", code="task_not_deleted")
         if timezone.now() - task.deleted_at > RESTORE_WINDOW:

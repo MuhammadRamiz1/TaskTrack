@@ -121,7 +121,6 @@ def _company_b_objects(company_b, victim) -> dict:
         "export_id": export.pk,
         "schedule_id": schedule.pk,
         "entry_id": entry.pk,
-        "timesheet_id": entry.timesheet_id,
         "team_id": team.pk,
         "project_id": project.pk,
         "task_id": task.pk,

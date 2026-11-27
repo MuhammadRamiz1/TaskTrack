@@ -139,7 +139,6 @@ function MemberDashboard() {
           <div className="flex flex-wrap gap-2">
             <Button asChild><Link href="/my-tasks">My tasks <ArrowRight /></Link></Button>
             {d.reviews_waiting_for_me > 0 && <Button asChild variant="outline"><Link href="/reviews">{d.reviews_waiting_for_me} review(s) waiting</Link></Button>}
-            <Button asChild variant="outline"><Link href="/timesheets">Timesheet</Link></Button>
           </div>
         </Card>
         <BarChartCard title="My tasks by status" data={statusData} emptyText="Nothing assigned yet" />

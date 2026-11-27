@@ -59,7 +59,6 @@ export function NotificationBell() {
             onSelect={() => {
               markRead.mutate({ params: { path: { notification_id: n.id } } });
               if (n.entity_type === "task" && n.entity_id) router.push(`/tasks/${n.entity_id}`);
-              else if (n.entity_type === "timesheet" && n.entity_id) router.push(`/timesheets/${n.entity_id}`);
             }}
           >
             <span className="line-clamp-2 font-semibold">{n.title}</span>

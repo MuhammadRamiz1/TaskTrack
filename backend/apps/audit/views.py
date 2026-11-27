@@ -1,5 +1,6 @@
 import django_filters
-from drf_spectacular.utils import extend_schema
+from django.db.models import Q
+from drf_spectacular.utils import extend_schema, extend_schema_field
 from rest_framework import serializers
 from rest_framework.response import Response
 
@@ -7,10 +8,33 @@ from apps.common.exceptions import NotFound
 from apps.common.pagination import PageNumberPagination
 from apps.common.views import LIST_FILTERS, PlatformAPIView, TenantAPIView, schema_generation
 
+from .describe import describe_entries
 from .models import AuditLog
 
 
+class AuditChange(serializers.Serializer):
+    field = serializers.CharField()
+    before = serializers.CharField()
+    after = serializers.CharField()
+
+
 class AuditLogOutput(serializers.ModelSerializer):
+    summary = serializers.SerializerMethodField(help_text="What happened, as a plain-English sentence.")
+    changes = serializers.SerializerMethodField(help_text="Changed fields in words (no codes or ids).")
+
+    def _described(self, entry) -> dict:
+        described = self.context.get("described")
+        if described is None or entry.pk not in described:
+            described = describe_entries([entry])
+        return described[entry.pk]
+
+    def get_summary(self, entry) -> str:
+        return self._described(entry)["summary"]
+
+    @extend_schema_field(AuditChange(many=True))
+    def get_changes(self, entry) -> list[dict]:
+        return self._described(entry)["changes"]
+
     class Meta:
         model = AuditLog
         fields = [
@@ -21,6 +45,8 @@ class AuditLogOutput(serializers.ModelSerializer):
             "actor_email",
             "impersonator_id",
             "action",
+            "summary",
+            "changes",
             "entity_type",
             "entity_id",
             "old_value",
@@ -31,8 +57,24 @@ class AuditLogOutput(serializers.ModelSerializer):
         ]
 
 
+#: Groups shown to people instead of action codes.
+CATEGORIES = {
+    "tasks": ("task.", "review."),
+    "organization": ("org.",),
+    "people": ("employee.", "invite.", "password.", "profile."),
+    "security": ("auth.", "impersonation.", "platform.impersonation."),
+    "roles": ("rbac.",),
+    "time": ("time.",),
+    "reports": ("report.",),
+    "settings": ("company.", "workflow.", "notification."),
+}
+
+
 class AuditFilter(django_filters.FilterSet):
     actor = django_filters.UUIDFilter(field_name="actor_id")
+    category = django_filters.ChoiceFilter(
+        choices=[(k, k.title()) for k in CATEGORIES], method="filter_category", label="Kind of activity"
+    )
     action = django_filters.CharFilter(field_name="action", lookup_expr="startswith")
     entity_type = django_filters.CharFilter()
     entity_id = django_filters.CharFilter()
@@ -41,7 +83,13 @@ class AuditFilter(django_filters.FilterSet):
 
     class Meta:
         model = AuditLog
-        fields = ["actor", "action", "entity_type", "entity_id", "date_from", "date_to"]
+        fields = ["actor", "category", "action", "entity_type", "entity_id", "date_from", "date_to"]
+
+    def filter_category(self, queryset, name, value):
+        match = Q()
+        for prefix in CATEGORIES[value]:
+            match |= Q(action__startswith=prefix)
+        return queryset.filter(match)
 
 
 class PlatformAuditFilter(AuditFilter):
@@ -60,7 +108,8 @@ class _AuditList:
     @extend_schema(responses=AuditLogOutput(many=True), tags=["audit"])
     def get(self, request):
         page = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
-        return self.get_paginated_response(AuditLogOutput(page, many=True).data)
+        context = {"described": describe_entries(page)}
+        return self.get_paginated_response(AuditLogOutput(page, many=True, context=context).data)
 
 
 class AuditListView(_AuditList, TenantAPIView):
